@@ -113,3 +113,20 @@ export const roleCodes: RoleCodes = {
     /** Role identifier for approved writers */
     write: id("WRITER_ROLE"),
 }
+
+/**
+ * Debug mode flag. When true, logs errors to the console.
+ * Set to false in production to minimize console output.
+ */
+export const DEBUG = process.env.DEBUG || false;
+
+/**
+ * Conditionally logs errors to the console based on the DEBUG flag.
+ * @param message - The error message
+ * @param error - The actual error object
+ */
+export function logError(message: string, error: any): void {
+    if (DEBUG) {
+        console.error(message, error);
+    }
+}
