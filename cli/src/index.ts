@@ -115,7 +115,7 @@ const validateShortName = (input: string): string | boolean => {
 
     // Input is valid
     return true;
-}
+};
 
 /**
  * Validates an Ethereum wallet address format.
@@ -133,7 +133,7 @@ const validateAddress = (input: string): string | boolean => {
 
     // Input is valid
     return true;
-}
+};
 
 /**
  * Validates an ECTS credit value format.
@@ -149,15 +149,36 @@ const validateEcts = (input: string): string | boolean => {
         return 'Please enter a valid ECTS value (positive number)';
     }
 
-// Enforce maximum ECTS value constraint
-const ects = parseFloat(input);
+    // Enforce maximum ECTS value constraint
+    const ects = parseFloat(input);
     if (ects > 100) {
         return 'Please enter a valid ECTS value (maximum 100 credits allowed)';
     }
 
     // Input is valid
     return true;
-}
+};
+
+/**
+ * Validates a course evaluation result for appropriate length constraints.
+ * Ensures grades meet minimum and maximum length requirements.
+ * @author Diego Da Giau
+ * @param {string} input - The result string to validate
+ * @returns {string|boolean} Error message if validation fails, true if validation succeeds
+ */
+const validateGrade = (input: string): string | boolean => {
+    // Enforce minimum short name length
+    if (input.length === 0) {
+        return 'Please enter a value';
+    }
+    // Enforce maximum short name length
+    else if (input.length > 15) {
+        return 'Please enter a result of maximum 15 characters';
+    }
+
+    // Input is valid
+    return true;
+};
 
 /**
  * Deploys the core Students Register contract to the blockchain.
@@ -418,7 +439,7 @@ async function evaluateStudentCommand(): Promise<void> {
                 type: 'input',
                 name: 'grade',
                 message: 'Enter evaluation result:',
-                validate: validateString,
+                validate: validateGrade,
             },
             {
                 type: 'input',
