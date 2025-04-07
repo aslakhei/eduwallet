@@ -186,7 +186,7 @@ const validateGrade = (input: string): string | boolean => {
  * Manages the deployment process with visual feedback using a spinner.
  * @author Diego Da Giau
  * @returns {Promise<void>} Promise that resolves when the contract is successfully deployed
- * @throws {Error} If deployment fails for any reason
+ * @throws {Error} If deployment fails for any reason, exits the process with code 1
  */
 async function deployRegisterContract(): Promise<void> {
     try {
@@ -205,32 +205,41 @@ async function deployRegisterContract(): Promise<void> {
  * Prompts for university details and registers a new university in the system.
  * Collects and validates university name, country, and short name.
  * @author Diego Da Giau
- * @returns {Promise<void>} Promise that resolves when the university is successfully subscribed
+ * @returns {Promise<void>} Promise that resolves when the university is successfully subscribed or fails
  */
 async function subscribeUniversityCommand(): Promise<void> {
-    const answers = await inquirer.prompt([
-        {
-            type: 'input',
-            name: 'name',
-            message: 'Enter university name:',
-            validate: validateLongString,
-        },
-        {
-            type: 'input',
-            name: 'country',
-            message: 'Enter university country:',
-            validate: validateString,
-        },
-        {
-            type: 'input',
-            name: 'shortName',
-            message: 'Enter university short name:',
-            validate: validateShortName,
-        },
-    ]);
-    const spinner = ora('Subscribing the university...').start();
-    await subscribeUniversity(answers.name, answers.country, answers.shortName);
-    spinner.succeed('University subscribed successfully!');
+    try {
+        const answers = await inquirer.prompt([
+            {
+                type: 'input',
+                name: 'name',
+                message: 'Enter university name:',
+                validate: validateLongString,
+            },
+            {
+                type: 'input',
+                name: 'country',
+                message: 'Enter university country:',
+                validate: validateString,
+            },
+            {
+                type: 'input',
+                name: 'shortName',
+                message: 'Enter university short name:',
+                validate: validateShortName,
+            },
+        ]);
+        const spinner = ora('Subscribing the university...').start();
+        try {
+            await subscribeUniversity(answers.name, answers.country, answers.shortName);
+            spinner.succeed('University subscribed successfully!');
+        } catch (error) {
+            spinner.fail(`Failed to subscribe university`);
+            console.error("University subscription error details:", error);
+        }
+    } catch (error) {
+        console.error("Failed to collect university information:", error);
+    }
 }
 
 /**
@@ -240,42 +249,51 @@ async function subscribeUniversityCommand(): Promise<void> {
  * @returns {Promise<void>} Promise that resolves when the student is successfully registered
  */
 async function registerStudentCommand(): Promise<void> {
-    const answers = await inquirer.prompt([
-        {
-            type: 'input',
-            name: 'name',
-            message: 'Enter student first name:',
-            validate: validateString,
-        },
-        {
-            type: 'input',
-            name: 'surname',
-            message: 'Enter student second name:',
-            validate: validateString,
-        },
-        {
-            type: 'input',
-            name: 'birthDate',
-            message: 'Enter student date of birth (YYYY-MM-DD):',
-            validate: validateDate,
-        },
-        {
-            type: 'input',
-            name: 'birthPlace',
-            message: 'Enter student place of birth:',
-            validate: validateString,
-        },
-        {
-            type: 'input',
-            name: 'country',
-            message: 'Enter student country of birth:',
-            validate: validateString,
-        },
-    ]);
+    try {
+        const answers = await inquirer.prompt([
+            {
+                type: 'input',
+                name: 'name',
+                message: 'Enter student first name:',
+                validate: validateString,
+            },
+            {
+                type: 'input',
+                name: 'surname',
+                message: 'Enter student second name:',
+                validate: validateString,
+            },
+            {
+                type: 'input',
+                name: 'birthDate',
+                message: 'Enter student date of birth (YYYY-MM-DD):',
+                validate: validateDate,
+            },
+            {
+                type: 'input',
+                name: 'birthPlace',
+                message: 'Enter student place of birth:',
+                validate: validateString,
+            },
+            {
+                type: 'input',
+                name: 'country',
+                message: 'Enter student country of birth:',
+                validate: validateString,
+            },
+        ]);
 
-    const spinner = ora('Registering the student...').start();
-    await registerStudent(answers.name, answers.surname, answers.birthDate, answers.birthPlace, answers.country);
-    spinner.succeed('Student registered successfully!');
+        const spinner = ora('Registering the student...').start();
+        try {
+            await registerStudent(answers.name, answers.surname, answers.birthDate, answers.birthPlace, answers.country);
+            spinner.succeed('Student registered successfully!');
+        } catch (error) {
+            spinner.fail(`Failed to register student`);
+            console.error("Student registration error details:", error);
+        }
+    } catch (error) {
+        console.error("Failed to collect student information:", error);
+    }
 }
 
 /**
@@ -285,17 +303,26 @@ async function registerStudentCommand(): Promise<void> {
  * @returns {Promise<void>} Promise that resolves when student information is successfully retrieved
  */
 async function getStudentInfoCommand(): Promise<void> {
-    const answers = await inquirer.prompt([
-        {
-            type: 'input',
-            name: 'wallet',
-            message: 'Enter student academic wallet address (0x...):',
-            validate: validateAddress,
-        },
-    ]);
-    const spinner = ora('Retrieving the student info...').start();
-    await getStudentInfo(answers.wallet);
-    spinner.succeed('Student information retrieved successfully');
+    try {
+        const answers = await inquirer.prompt([
+            {
+                type: 'input',
+                name: 'wallet',
+                message: 'Enter student academic wallet address (0x...):',
+                validate: validateAddress,
+            },
+        ]);
+        const spinner = ora('Retrieving the student info...').start();
+        try {
+            await getStudentInfo(answers.wallet);
+            spinner.succeed('Student information retrieved successfully');
+        } catch (error) {
+            spinner.fail(`Failed to retrieve student info`);
+            console.error("Student info retrieval error details:", error);
+        }
+    } catch (error) {
+        console.error("Failed to collect wallet address:", error);
+    }
 }
 
 /**
@@ -305,17 +332,26 @@ async function getStudentInfoCommand(): Promise<void> {
  * @returns {Promise<void>} Promise that resolves when student information and results are successfully retrieved
  */
 async function getStudentResultsCommand(): Promise<void> {
-    const answers = await inquirer.prompt([
-        {
-            type: 'input',
-            name: 'wallet',
-            message: 'Enter student academic wallet address (0x...):',
-            validate: validateAddress,
-        },
-    ]);
-    const spinner = ora('Retrieving the student info and results...').start();
-    await getStudentInfoResults(answers.wallet);
-    spinner.succeed('Student information and results retrieved successfully');
+    try {
+        const answers = await inquirer.prompt([
+            {
+                type: 'input',
+                name: 'wallet',
+                message: 'Enter student academic wallet address (0x...):',
+                validate: validateAddress,
+            },
+        ]);
+        const spinner = ora('Retrieving the student info and results...').start();
+        try {
+            await getStudentInfoResults(answers.wallet);
+            spinner.succeed('Student information and results retrieved successfully');
+        } catch (error) {
+            spinner.fail(`Failed to retrieve student info and results`);
+            console.error("Student info and results retrieval error details:", error);
+        }
+    } catch (error) {
+        console.error("Failed to collect wallet address:", error);
+    }
 }
 
 /**
@@ -326,79 +362,97 @@ async function getStudentResultsCommand(): Promise<void> {
  * @returns {Promise<void>} Promise that resolves when the student is successfully enrolled in all courses
  */
 async function enrollStudentCommand(): Promise<void> {
-    // Get student wallet address
-    const student = await inquirer.prompt([
-        {
-            type: 'input',
-            name: 'wallet',
-            message: 'Enter student academic wallet address (0x...):',
-            validate: validateAddress,
-        },
-    ]);
-
-    // Collection of courses to enroll the student in
-    const courses: eduwallet.CourseInfo[] = [];
-
-    // Continue collecting course information until user chooses to enroll
-    while (true) {
-        const answers = await inquirer.prompt([
+    try {
+        // Get student wallet address
+        const student = await inquirer.prompt([
             {
                 type: 'input',
-                name: 'code',
-                message: 'Enter course code:',
-                validate: validateString,
-            },
-            {
-                type: 'input',
-                name: 'name',
-                message: 'Enter course name:',
-                validate: validateLongString,
-            },
-            {
-                type: 'input',
-                name: 'degreeCourse',
-                message: 'Enter degree course name:',
-                validate: validateLongString,
-            },
-            {
-                type: 'input',
-                name: 'ects',
-                message: 'Enter ECTS number:',
-                validate: validateEcts,
+                name: 'wallet',
+                message: 'Enter student academic wallet address (0x...):',
+                validate: validateAddress,
             },
         ]);
-        
-        // Add the course to the collection
-        courses.push({
-            code: answers.code,
-            name: answers.name,
-            degreeCourse: answers.degreeCourse,
-            ects: parseInt(answers.ects),
-        });
-        
-        // Check if user wants to add more courses or proceed with enrollment
-        const action = await inquirer.prompt([
-            {
-                type: 'list',
-                name: 'action',
-                message: 'What would you like to do?',
-                choices: [
-                    'Add another course',
-                    'Enroll',
-                ]
+
+        // Collection of courses to enroll the student in
+        const courses: eduwallet.CourseInfo[] = [];
+
+        // Continue collecting course information until user chooses to enroll
+        while (true) {
+            try {
+                const answers = await inquirer.prompt([
+                    {
+                        type: 'input',
+                        name: 'code',
+                        message: 'Enter course code:',
+                        validate: validateString,
+                    },
+                    {
+                        type: 'input',
+                        name: 'name',
+                        message: 'Enter course name:',
+                        validate: validateLongString,
+                    },
+                    {
+                        type: 'input',
+                        name: 'degreeCourse',
+                        message: 'Enter degree course name:',
+                        validate: validateLongString,
+                    },
+                    {
+                        type: 'input',
+                        name: 'ects',
+                        message: 'Enter ECTS number:',
+                        validate: validateEcts,
+                    },
+                ]);
+
+                // Add the course to the collection
+                courses.push({
+                    code: answers.code,
+                    name: answers.name,
+                    degreeCourse: answers.degreeCourse,
+                    ects: parseInt(answers.ects),
+                });
+
+                // Check if user wants to add more courses or proceed with enrollment
+                const action = await inquirer.prompt([
+                    {
+                        type: 'list',
+                        name: 'action',
+                        message: 'What would you like to do?',
+                        choices: [
+                            'Add another course',
+                            'Enroll',
+                        ]
+                    }
+                ]);
+
+                // Break the loop if user chooses to enroll
+                if (action.action === 'Enroll') {
+                    break;
+                }
+            } catch (error) {
+                console.error("Error while collecting course information:", error);
             }
-        ]);
-        
-        // Break the loop if user chooses to enroll
-        if (action.action === 'Enroll') {
-            break;
         }
+
+        // Process enrollment with visual feedback
+        if (courses.length === 0) {
+            console.log("No courses added. Enrollment cancelled.");
+            return;
+        }
+
+        const spinner = ora('Enrolling the student...').start();
+        try {
+            await enrollStudent(student.wallet, courses);
+            spinner.succeed('Student enrolled successfully');
+        } catch (error) {
+            spinner.fail(`Failed to enroll student`);
+            console.error("Student enrollment error details:", error);
+        }
+    } catch (error) {
+        console.error("Failed to complete enrollment process:", error);
     }
-    
-    // Process enrollment with visual feedback
-    const spinner = ora('Enrolling the student...').start();
-    await enrollStudent(student.wallet, courses);
-    spinner.succeed('Student enrolled successfully');
 }
 
 /**
@@ -409,76 +463,94 @@ async function enrollStudentCommand(): Promise<void> {
  * @returns {Promise<void>} Promise that resolves when the student is successfully evaluated for all submitted courses
  */
 async function evaluateStudentCommand(): Promise<void> {
-    // Get student wallet address
-    const evaluations: eduwallet.Evaluation[] = [];
-    const student = await inquirer.prompt([
-        {
-            type: 'input',
-            name: 'wallet',
-            message: 'Enter student academic wallet address (0x...):',
-            validate: validateAddress,
-        },
-    ]);
-
-    // Continue collecting evaluation information until user chooses to submit
-    while (true) {
-        const answers = await inquirer.prompt([
+    try {
+        // Get student wallet address
+        const evaluations: eduwallet.Evaluation[] = [];
+        const student = await inquirer.prompt([
             {
                 type: 'input',
-                name: 'code',
-                message: 'Enter course code:',
-                validate: validateString,
-            },
-            {
-                type: 'input',
-                name: 'evaluationDate',
-                message: 'Enter evaluation date (YYYY-MM-DD):',
-                validate: validateDate,
-            },
-            {
-                type: 'input',
-                name: 'grade',
-                message: 'Enter evaluation result:',
-                validate: validateGrade,
-            },
-            {
-                type: 'input',
-                name: 'certificate',
-                message: 'Enter certificate path (optional):',
+                name: 'wallet',
+                message: 'Enter student academic wallet address (0x...):',
+                validate: validateAddress,
             },
         ]);
 
-        // Add the evaluation to the collection
-        evaluations.push({
-            code: answers.code,
-            evaluationDate: answers.evaluationDate,
-            grade: answers.grade,
-            certificate: answers.certificate === '' ? null : answers.certificate,
-        });
+        // Continue collecting evaluation information until user chooses to submit
+        while (true) {
+            try {
+                const answers = await inquirer.prompt([
+                    {
+                        type: 'input',
+                        name: 'code',
+                        message: 'Enter course code:',
+                        validate: validateString,
+                    },
+                    {
+                        type: 'input',
+                        name: 'evaluationDate',
+                        message: 'Enter evaluation date (YYYY-MM-DD):',
+                        validate: validateDate,
+                    },
+                    {
+                        type: 'input',
+                        name: 'grade',
+                        message: 'Enter evaluation result:',
+                        validate: validateGrade,
+                    },
+                    {
+                        type: 'input',
+                        name: 'certificate',
+                        message: 'Enter certificate path (optional):',
+                    },
+                ]);
 
-        // Check if user wants to add more evaluations or proceed with submission
-        const action = await inquirer.prompt([
-            {
-                type: 'list',
-                name: 'action',
-                message: 'What would you like to do?',
-                choices: [
-                    'Add another evaluation',
-                    'Evaluate',
-                ]
+                // Add the evaluation to the collection
+                evaluations.push({
+                    code: answers.code,
+                    evaluationDate: answers.evaluationDate,
+                    grade: answers.grade,
+                    certificate: answers.certificate === '' ? null : answers.certificate,
+                });
+
+                // Check if user wants to add more evaluations or proceed with submission
+                const action = await inquirer.prompt([
+                    {
+                        type: 'list',
+                        name: 'action',
+                        message: 'What would you like to do?',
+                        choices: [
+                            'Add another evaluation',
+                            'Evaluate',
+                        ]
+                    }
+                ]);
+
+                // Break the loop if user chooses to evaluate
+                if (action.action === 'Evaluate') {
+                    break;
+                }
+            } catch (error) {
+                console.error("Error while collecting evaluation information:", error);
             }
-        ]);
-
-        // Break the loop if user chooses to evaluate
-        if (action.action === 'Evaluate') {
-            break;
         }
+
+        // Process evaluations with visual feedback
+        if (evaluations.length === 0) {
+            console.log("No evaluations added. Evaluation cancelled.");
+            return;
+        }
+
+        const spinner = ora('Evaluating the student...').start();
+        try {
+            await evaluateStudent(student.wallet, evaluations);
+            spinner.succeed('Student evaluated successfully');
+        } catch (error) {
+            spinner.fail(`Failed to evaluate student`);
+            console.error("Student evaluation error details:", error);
+        }
+    } catch (error) {
+        console.error("Failed to complete evaluation process:", error);
     }
-    
-    // Process evaluations with visual feedback
-    const spinner = ora('Evaluating the student...').start();
-    await evaluateStudent(student.wallet, evaluations);
-    spinner.succeed('Student evaluated successfully');
 }
 
 /**
@@ -489,42 +561,51 @@ async function evaluateStudentCommand(): Promise<void> {
  * @returns {Promise<void>} Promise that resolves when the permission request is submitted and confirmed
  */
 async function requestPermissionCommand(): Promise<void> {
-    // Get student wallet address and permission type
-    const answers = await inquirer.prompt([
-        {
-            type: 'input',
-            name: 'wallet',
-            message: 'Enter student academic wallet address (0x...):',
-            validate: validateAddress,
-        },
-        {
-            type: 'list',
-            name: 'action',
-            message: 'What type of permission do you want to ask?',
-            choices: [
-                'Read',
-                'Write'
-            ]
+    try {
+        // Get student wallet address and permission type
+        const answers = await inquirer.prompt([
+            {
+                type: 'input',
+                name: 'wallet',
+                message: 'Enter student academic wallet address (0x...):',
+                validate: validateAddress,
+            },
+            {
+                type: 'list',
+                name: 'action',
+                message: 'What type of permission do you want to ask?',
+                choices: [
+                    'Read',
+                    'Write'
+                ]
+            }
+        ]);
+
+        // Determine permission type based on user selection
+        let permission: PermissionType;
+        switch (answers.action) {
+            case 'Read':
+                permission = PermissionType.Read;
+                break;
+            case 'Write':
+                permission = PermissionType.Write;
+                break;
+            default:
+                permission = PermissionType.Read;
         }
-    ]);
 
-    // Determine permission type based on user selection
-    let permission: PermissionType;
-    switch (answers.action) {
-        case 'Read':
-            permission = PermissionType.Read;
-            break;
-        case 'Write':
-            permission = PermissionType.Write;
-            break;
-        default:
-            permission = PermissionType.Read;
+        // Process permission request with visual feedback
+        const spinner = ora(`Requesting the ${answers.action} permission...`).start();
+        try {
+            await requestPermission(answers.wallet, permission);
+            spinner.succeed('Permission requested successfully');
+        } catch (error) {
+            spinner.fail(`Failed to request permission`);
+            console.error("Permission request error details:", error);
+        }
+    } catch (error) {
+        console.error("Failed to collect permission request information:", error);
     }
-
-    // Process permission request with visual feedback
-    const spinner = ora(`Requesting the ${answers.action} permission...`).start();
-    await requestPermission(answers.wallet, permission);
-    spinner.succeed('Permission requested successfully');
 }
 
 /**
@@ -534,20 +615,29 @@ async function requestPermissionCommand(): Promise<void> {
  * @returns {Promise<void>} Promise that resolves when the permission verification is complete
  */
 async function verifyPermissionCommand(): Promise<void> {
-    // Get student wallet address
-    const answers = await inquirer.prompt([
-        {
-            type: 'input',
-            name: 'wallet',
-            message: 'Enter student academic wallet address (0x...):',
-            validate: validateAddress,
-        },
-    ]);
-    
-    // Process verification with visual feedback
-    const spinner = ora(`Verifying available permission...`).start();
-    await verifyPermission(answers.wallet);
-    spinner.succeed('Permission verified successfully');
+    try {
+        // Get student wallet address
+        const answers = await inquirer.prompt([
+            {
+                type: 'input',
+                name: 'wallet',
+                message: 'Enter student academic wallet address (0x...):',
+                validate: validateAddress,
+            },
+        ]);
+
+        // Process verification with visual feedback
+        const spinner = ora(`Verifying available permission...`).start();
+        try {
+            await verifyPermission(answers.wallet);
+            spinner.succeed('Permission verified successfully');
+        } catch (error) {
+            spinner.fail(`Failed to verify permission`);
+            console.error("Permission verification error details:", error);
+        }
+    } catch (error) {
+        console.error("Failed to collect wallet address:", error);
+    }
 }
 
 /**
@@ -557,20 +647,29 @@ async function verifyPermissionCommand(): Promise<void> {
  * @returns {Promise<void>} Promise that resolves when the university wallet is successfully changed
  */
 async function changeUniversityCommand(): Promise<void> {
-    // Get university private key
-    const answers = await inquirer.prompt([
-        {
-            type: 'input',
-            name: 'privateKey',
-            message: 'Enter university private key (0x...):',
-            validate: validatePrivateKey,
-        },
-    ]);
-    
-    // Process university change with visual feedback
-    const spinner = ora(`Changing university...`).start();
-    changeUniversity(new Wallet(answers.privateKey));
-    spinner.succeed('University changed successfully');
+    try {
+        // Get university private key
+        const answers = await inquirer.prompt([
+            {
+                type: 'input',
+                name: 'privateKey',
+                message: 'Enter university private key (0x...):',
+                validate: validatePrivateKey,
+            },
+        ]);
+
+        // Process university change with visual feedback
+        const spinner = ora(`Changing university...`).start();
+        try {
+            changeUniversity(new Wallet(answers.privateKey));
+            spinner.succeed('University changed successfully');
+        } catch (error) {
+            spinner.fail(`Failed to change university`);
+            console.error("University change error details:", error);
+        }
+    } catch (error) {
+        console.error("Failed to collect university private key:", error);
+    }
 }
 
 /**
@@ -583,84 +682,97 @@ async function changeUniversityCommand(): Promise<void> {
 async function mainMenu(): Promise<void> {
     // Continue displaying menu until user explicitly exits
     while (true) {
-        let choices: string[] = [];
-        // Show different menu options based on university wallet availability
-        if (uni) {
-            // Full menu when university wallet is configured
-            choices = [
-                'Subscribe a university',
-                'Register a student',
-                "Get student basic information",
-                "Get student basic information and results",
-                'Enroll a student',
-                'Evaluate a student',
-                'Request permission from a student',
-                'Verify permission for a student',
-                'Change university',
-                'Exit'
-            ];
-        } else {
-            // Limited menu when no university wallet is configured
-            choices = [
-                'Subscribe a university',
-                'Exit'
-            ];
-        }
-
-        const action = await inquirer.prompt([
-            {
-                type: 'list',
-                name: 'action',
-                message: 'What would you like to do?',
-                choices,
+        try {
+            let choices: string[] = [];
+            // Show different menu options based on university wallet availability
+            if (uni) {
+                // Full menu when university wallet is configured
+                choices = [
+                    'Subscribe a university',
+                    'Register a student',
+                    "Get student basic information",
+                    "Get student basic information and results",
+                    'Enroll a student',
+                    'Evaluate a student',
+                    'Request permission from a student',
+                    'Verify permission for a student',
+                    'Change university',
+                    'Exit'
+                ];
+            } else {
+                // Limited menu when no university wallet is configured
+                choices = [
+                    'Subscribe a university',
+                    'Exit'
+                ];
             }
-        ]);
 
-        // Process user selection and execute corresponding command
-        switch (action.action) {
-            case 'Subscribe a university':
-                await subscribeUniversityCommand();
-                break;
-            case 'Register a student':
-                await registerStudentCommand();
-                break;
-            case "Get student basic information":
-                await getStudentInfoCommand();
-                break;
-            case "Get student basic information and results":
-                await getStudentResultsCommand();
-                break;
-            case 'Enroll a student':
-                await enrollStudentCommand();
-                break;
-            case 'Evaluate a student':
-                await evaluateStudentCommand();
-                break;
-            case 'Request permission from a student':
-                await requestPermissionCommand();
-                break;
-            case 'Verify permission for a student':
-                await verifyPermissionCommand();
-                break;
-            case 'Change university':
-                await changeUniversityCommand();
-                break;
-            case 'Exit':
-                console.log('Goodbye!');
-                process.exit(0);
-            default:
-                // Handle any unexpected selections
-                console.log('Invalid option selected');
-                break;
+            const action = await inquirer.prompt([
+                {
+                    type: 'list',
+                    name: 'action',
+                    message: 'What would you like to do?',
+                    choices,
+                }
+            ]);
+
+            // Process user selection and execute corresponding command
+            switch (action.action) {
+                case 'Subscribe a university':
+                    await subscribeUniversityCommand();
+                    break;
+                case 'Register a student':
+                    await registerStudentCommand();
+                    break;
+                case "Get student basic information":
+                    await getStudentInfoCommand();
+                    break;
+                case "Get student basic information and results":
+                    await getStudentResultsCommand();
+                    break;
+                case 'Enroll a student':
+                    await enrollStudentCommand();
+                    break;
+                case 'Evaluate a student':
+                    await evaluateStudentCommand();
+                    break;
+                case 'Request permission from a student':
+                    await requestPermissionCommand();
+                    break;
+                case 'Verify permission for a student':
+                    await verifyPermissionCommand();
+                    break;
+                case 'Change university':
+                    await changeUniversityCommand();
+                    break;
+                case 'Exit':
+                    console.log('Goodbye!');
+                    process.exit(0);
+                default:
+                    // Handle any unexpected selections
+                    console.log('Invalid option selected');
+                    break;
+            }
+        } catch (error) {
+            console.error("An unexpected error occurred in the main menu:", error);
+            console.log("Restarting menu...");
         }
     }
 }
 
 // Main execution starts here
 async function main() {
-    console.log(figlet.textSync("EduWallet"));
-    await deployRegisterContract();
-    await mainMenu();
+    try {
+        console.log(figlet.textSync("EduWallet"));
+        await deployRegisterContract();
+        await mainMenu();
+    } catch (error) {
+        console.error("A critical error occurred:", error);
+        process.exit(1);
+    }
 }
 
-main().catch(console.error);
+main().catch(error => {
+    console.error(error);
+    process.exit(1);
+});
