@@ -4,8 +4,9 @@ import { StudentsRegister } from '@typechain/contracts';
 import { StudentsRegister__factory } from "@typechain/factories/contracts/StudentsRegister__factory"
 import { StudentDeployer__factory } from '@typechain/factories/contracts/StudentDeployer__factory';
 import { UniversityDeployer__factory } from '@typechain/factories/contracts/UniversityDeployer__factory';
-import * as eduwallet from 'eduwallet-sdk'
-import * as dotenv from 'dotenv'
+import * as eduwallet from 'eduwallet-sdk';
+import * as dotenv from 'dotenv';
+
 
 // Load environment variables first before using them
 dotenv.config();
