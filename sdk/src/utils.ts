@@ -1,14 +1,14 @@
-import type { Student as StudentInterface, University, AcademicResult, StudentEthWalletInfo } from "./types";
-import { blockchainConfig, ipfsConfig, provider, s3Client } from "./conf";
+import type { Student as StudentInterface, University as UniversityInterface, AcademicResult, StudentEthWalletInfo } from "./types";
+import { blockchainConfig, ipfsConfig, logError, provider, s3Client } from "./conf";
 import type { StudentsRegister } from '@typechain/contracts/StudentsRegister';
 import { StudentsRegister__factory } from "@typechain/factories/contracts/StudentsRegister__factory"
 import type { Student } from '@typechain/contracts/Student';
-import { Student__factory } from '@typechain/factories/contracts/Student__factory'
-import { University__factory } from '@typechain/factories/contracts/University__factory'
+import { Student__factory } from '@typechain/factories/contracts/Student__factory';
+import { University__factory } from '@typechain/factories/contracts/University__factory';
 import { PutObjectCommand } from '@aws-sdk/client-s3';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc.js';
-import * as crypto from 'crypto';
+import { randomBytes, pbkdf2Sync } from 'node:crypto';
 import { readFileSync } from 'fs';
 import { Wallet } from 'ethers';
 
@@ -30,7 +30,7 @@ export function createStudentWallet(): StudentEthWalletInfo {
             ethWallet: wallet
         };
     } catch (error) {
-        console.error('Failed to create student wallet:', error);
+        logError('Failed to create student wallet:', error);
         throw new Error('Failed to create student wallet: ' + (error instanceof Error ? error.message : String(error)));
     }
 }
@@ -44,9 +44,9 @@ export function createStudentWallet(): StudentEthWalletInfo {
  */
 function generateRandomString(length: number): string {
     try {
-        return crypto.randomBytes(length).toString('hex');
+        return randomBytes(length).toString('hex');
     } catch (error) {
-        console.error('Failed to generate random string:', error);
+        logError('Failed to generate random string:', error);
         throw new Error('Failed to generate secure random string: ' + (error instanceof Error ? error.message : String(error)));
     }
 }
@@ -63,10 +63,10 @@ function derivePrivateKey(password: string, studentId: string): string {
     try {
         const iterations = 100000;
         const keyLength = 32;
-        const derivedKey = crypto.pbkdf2Sync(password, studentId, iterations, keyLength, 'sha256').toString('hex');
+        const derivedKey = pbkdf2Sync(password, studentId, iterations, keyLength, 'sha256').toString('hex');
         return '0x' + derivedKey;
     } catch (error) {
-        console.error('Failed to derive private key:', error);
+        logError('Failed to derive private key:', error);
         throw new Error('Failed to derive private key: ' + (error instanceof Error ? error.message : String(error)));
     }
 }
@@ -81,7 +81,7 @@ export function getStudentsRegister(): StudentsRegister {
     try {
         return StudentsRegister__factory.connect(blockchainConfig.registerAddress, provider);
     } catch (error) {
-        console.error('Failed to get StudentsRegister contract:', error);
+        logError('Failed to get StudentsRegister contract:', error);
         throw new Error('Failed to connect to StudentsRegister contract: ' + (error instanceof Error ? error.message : String(error)));
     }
 }
@@ -97,7 +97,7 @@ export function getStudentContract(contractAddress: string): Student {
     try {
         return Student__factory.connect(contractAddress, provider);
     } catch (error) {
-        console.error('Failed to get Student contract:', error);
+        logError('Failed to get Student contract:', error);
         throw new Error('Failed to connect to Student contract: ' + (error instanceof Error ? error.message : String(error)));
     }
 }
@@ -158,7 +158,7 @@ export async function publishCertificate(certificate: Buffer | string): Promise<
                     }
                     return response;
                 } catch (error) {
-                    console.error('Middleware error:', error);
+                    logError('Middleware error:', error);
                     throw error;
                 }
             }, {
@@ -178,7 +178,7 @@ export async function publishCertificate(certificate: Buffer | string): Promise<
         if (error instanceof Error && error.message.includes('ENOENT')) {
             throw new Error(`Certificate file not found: ${certificate}`);
         }
-        console.error('Failed to publish certificate:', error);
+        logError('Failed to publish certificate:', error);
         throw new Error('Failed to publish certificate: ' + (error instanceof Error ? error.message : String(error)));
     }
 }
@@ -217,7 +217,7 @@ export async function generateStudent(universityWallet: Wallet, student: Student
             results: resultsDef,
         };
     } catch (error) {
-        console.error('Failed to generate student data:', error);
+        logError('Failed to generate student data:', error);
         throw new Error('Failed to generate student data: ' + (error instanceof Error ? error.message : String(error)));
     }
 }
@@ -230,7 +230,7 @@ export async function generateStudent(universityWallet: Wallet, student: Student
  * @param {University} university - University information for this result
  * @returns {AcademicResult} Formatted academic result
  */
-function generateResult(result: Student.ResultStructOutput, university: University): AcademicResult {
+function generateResult(result: Student.ResultStructOutput, university: UniversityInterface): AcademicResult {
     try {
         return {
             name: result.name,
@@ -243,7 +243,7 @@ function generateResult(result: Student.ResultStructOutput, university: Universi
             certificate: result.certificateHash ? `${ipfsConfig.gatewayUrl}${result.certificateHash}` : undefined,
         };
     } catch (error) {
-        console.error('Failed to generate result:', error);
+        logError('Failed to generate result:', error);
         throw new Error('Failed to generate academic result: ' + (error instanceof Error ? error.message : String(error)));
     }
 }
@@ -256,7 +256,7 @@ function generateResult(result: Student.ResultStructOutput, university: Universi
  * @param {Set<string>} universitiesAddresses - Set of university blockchain addresses
  * @returns {Promise<Map<string, University>>} Map of university addresses to university details
  */
-async function getUniversities(universityWallet: Wallet, universitiesAddresses: Set<string>): Promise<Map<string, University>> {
+async function getUniversities(universityWallet: Wallet, universitiesAddresses: Set<string>): Promise<Map<string, UniversityInterface>> {
     try {
         // Get contract instance
         const studentsRegister = getStudentsRegister();
@@ -274,7 +274,7 @@ async function getUniversities(universityWallet: Wallet, universitiesAddresses: 
         }
 
         // Create a map to store university details by address
-        const universities = new Map<string, University>();
+        const universities = new Map<string, UniversityInterface>();
 
         // Fetch details for each university
         for (let i = 0; i < universitiesContract.length; i++) {
@@ -284,7 +284,7 @@ async function getUniversities(universityWallet: Wallet, universitiesAddresses: 
                     await getUniversity(universityWallet, universitiesContract[i])
                 );
             } catch (error) {
-                console.error(`Failed to get university data for ${universitiesArray[i]}:`, error);
+                logError(`Failed to get university data for ${universitiesArray[i]}:`, error);
                 // Continue with other universities instead of failing completely
             }
         }
@@ -295,7 +295,7 @@ async function getUniversities(universityWallet: Wallet, universitiesAddresses: 
 
         return universities;
     } catch (error) {
-        console.error('Failed to get universities:', error);
+        logError('Failed to get universities:', error);
         throw new Error('Failed to retrieve university information: ' + (error instanceof Error ? error.message : String(error)));
     }
 }
@@ -308,7 +308,7 @@ async function getUniversities(universityWallet: Wallet, universitiesAddresses: 
  * @param {string} universityContractAddress - Address of the university's contract
  * @returns {Promise<University>} University details
  */
-async function getUniversity(universityWallet: Wallet, universityContractAddress: string): Promise<University> {
+async function getUniversity(universityWallet: Wallet, universityContractAddress: string): Promise<UniversityInterface> {
     try {
         // Connect to university contract
         const contract = University__factory.connect(universityContractAddress, provider);
@@ -326,7 +326,7 @@ async function getUniversity(universityWallet: Wallet, universityContractAddress
             shortName,
         };
     } catch (error) {
-        console.error(`Failed to get university at address ${universityContractAddress}:`, error);
+        logError(`Failed to get university at address ${universityContractAddress}:`, error);
         throw new Error('Failed to retrieve university details: ' + (error instanceof Error ? error.message : String(error)));
     }
 }
