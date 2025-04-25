@@ -2,7 +2,8 @@
 
 pragma solidity >=0.8.2;
 
-import './University.sol';
+import "./University.sol";
+
 
 /**
  * @title University Deployer Smart Contract
@@ -14,14 +15,28 @@ contract UniversityDeployer {
     /**
      * @notice Creates a new University contract with the provided details
      * @dev Deploys a new University instance and returns its address
-     * @param name Full name of the university
-     * @param country Country where the university is located
-     * @param shortName Abbreviated name or acronym of the university
+     * @param _address Address of the university owner
+     * @param _name Full name of the university
+     * @param _country Country where the university is located
+     * @param _shortName Abbreviated name or acronym of the university
+     * @param _entryPoint EntryPoint contract address used by the account abstraction layer
      * @return address The deployed University contract address
      */
-    function createUniversity(string calldata name, string calldata country, string calldata shortName) 
-        external returns (address) {
-        University newUniversity = new University(name, country, shortName);
+    function createUniversity(
+        address _address,
+        string calldata _name,
+        string calldata _country,
+        string calldata _shortName,
+        IEntryPoint _entryPoint
+    ) external returns (address) {
+        // Deploy new university contract
+        University newUniversity = new University(
+            _address,
+            _name,
+            _country,
+            _shortName,
+            _entryPoint
+        );
         return address(newUniversity);
     }
 }
