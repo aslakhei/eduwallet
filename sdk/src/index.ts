@@ -52,7 +52,7 @@ export async function registerStudent(universityWallet: Wallet, student: Student
         const connectedUniversity = universityWallet.connect(provider);
 
         // Format student data for the contract
-        const basinInfo: StudentContract.StudentBasicInfoStruct = {
+        const basicInfo: StudentContract.StudentBasicInfoStruct = {
             name: student.name,
             surname: student.surname,
             birthDate: dayjs.utc(student.birthDate).unix(),
@@ -63,7 +63,7 @@ export async function registerStudent(universityWallet: Wallet, student: Student
         // Register student on the blockchain
         const registerTx = await studentsRegister.connect(connectedUniversity).registerStudent(
             studentEthWallet.ethWallet.address,
-            basinInfo
+            basicInfo
         );
         await registerTx.wait();
 

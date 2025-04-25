@@ -2,13 +2,19 @@ import { HardhatUserConfig } from "hardhat/config";
 import "@nomicfoundation/hardhat-toolbox";
 
 const config: HardhatUserConfig = {
-  solidity: "0.8.28",
+  solidity: {
+    version: "0.8.28",
+    settings: {
+      optimizer: {
+        enabled: true,
+        runs: 1000,
+      },
+      evmVersion: "cancun"
+    },
+  },
   networks: {
     hardhat: {
-      // mining: {
-      //   auto: true,
-      //   interval: 20000
-      // },
+      hardfork: "cancun",
       accounts: [
         {
           balance: "10000000000000000000000000000000",
@@ -17,10 +23,6 @@ const config: HardhatUserConfig = {
       ]
     },
     localhost: {
-      // mining: {
-      //   auto: true,
-      //   interval: 20000
-      // },
       url: "http://127.0.0.1:8545"
     },
   },
