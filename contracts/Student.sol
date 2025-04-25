@@ -3,6 +3,8 @@
 pragma solidity >=0.8.2;
 
 import {AccessControlEnumerable} from "@openzeppelin/contracts/access/extensions/AccessControlEnumerable.sol";
+import {SmartAccount} from "./SmartAccount.sol";
+import {IEntryPoint} from "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
 
 // Custom errors for better clarity
 error UnauthorizedReading();
@@ -21,7 +23,7 @@ error PermissionAlreadyGiven();
  * ? Enroll and Evaluate with an array of struct as parameter?
  * ? Why students have a different function than universities to fetch information?
  */
-contract Student is AccessControlEnumerable {
+contract Student is SmartAccount, AccessControlEnumerable {
     // Role definitions for access control
     bytes32 private constant READER_ROLE = keccak256("READER_ROLE");
     bytes32 private constant WRITER_ROLE = keccak256("WRITER_ROLE");
@@ -87,12 +89,14 @@ contract Student is AccessControlEnumerable {
      * @param _university Initial university address to receive WRITER_ROLE
      * @param _student Student's address to receive DEFAULT_ADMIN_ROLE
      * @param _basicInfo Struct containing core biographical student's info
+     * @param _entryPoint EntryPoint contract address used by the account abstraction layer
      */
     constructor(
         address _university,
         address _student,
-        StudentBasicInfo memory _basicInfo
-    ) {
+        StudentBasicInfo memory _basicInfo,
+        IEntryPoint _entryPoint
+    ) SmartAccount(_entryPoint, _student) {
         studentInfo.basicInfo = _basicInfo;
 
         // Set the student as admin of the wallet
