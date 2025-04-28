@@ -111,17 +111,17 @@ export async function deployStudentsRegister(): Promise<void> {
  * @returns {Promise<[EntryPoint, StudentDeployer, UniversityDeployer]>} Triple of deployed contract instances
  */
 async function deployInfrastructureContracts(deployer: NonceManager): Promise<[EntryPoint, StudentDeployer, UniversityDeployer]> {
-    // Create contract factories
+    // Deploy EntryPoint contract using TypeChain factory
     const entryPointFactory = new EntryPoint__factory(deployer);
-    const studentDeployerFactory = new StudentDeployer__factory(deployer);
-    const universityDeployerFactory = new UniversityDeployer__factory(deployer);
+    const entryPoint = await entryPointFactory.deploy();
 
-    // Deploy contracts in parallel
-    const [entryPoint, studentDeployer, universityDeployer] = await Promise.all([
-        entryPointFactory.deploy(),
-        studentDeployerFactory.deploy(),
-        universityDeployerFactory.deploy()
-    ]);
+    // Deploy StudentDeployer contract using TypeChain factory
+    const studentDeployerFactory = new StudentDeployer__factory(deployer);
+    const studentDeployer = await studentDeployerFactory.deploy();
+
+    // Deploy UniversityDeployer contract using TypeChain factory
+    const universityDeployerFactory = new UniversityDeployer__factory(deployer);
+    const universityDeployer = await universityDeployerFactory.deploy();
 
     // Wait for deployments to be mined
     await Promise.all([
@@ -157,19 +157,13 @@ async function deployApplicationContracts(
             universityDeployer.getAddress()
         ]);
 
-    // Create factories for application contracts
+    // Deploy StudentsRegister contract using TypeChain factory
     const studentsRegisterFactory = new StudentsRegister__factory(deployer);
-    const paymasterFactory = new Paymaster__factory(deployer);
+    const register = await studentsRegisterFactory.deploy(studentDeployerAddress, universityDeployerAddress, entryPoint);
 
-    // Deploy contracts in parallel
-    const [register, paymaster] = await Promise.all([
-        studentsRegisterFactory.deploy(
-            studentDeployerAddress,
-            universityDeployerAddress,
-            entryPoint
-        ),
-        paymasterFactory.deploy(entryPointAddress)
-    ]);
+    // Deploy Paymaster contract using TypeChain factory
+    const paymasterFactory = new Paymaster__factory(deployer);
+    const paymaster = await paymasterFactory.deploy(entryPointAddress);
 
     // Wait for deployments to be mined
     await Promise.all([
@@ -442,17 +436,9 @@ export async function enrollStudent(studentWallet: string, courses: eduwallet.Co
         if (VERBOSE) {
             console.log("\nEnrolling student...");
         }
+
         // Use the SDK to enroll the student in the courses
-        let failedCourses = await eduwallet.enrollStudent(uni, studentWallet, courses);
-
-        // TODO: Implement retry logic for failed enrollments
-        // while (tx.length > 0) {
-        //     tx = await eduwallet.enrollStudent(uni, studentWallet, courses);
-        // }
-
-        if (failedCourses.length > 0) {
-            throw new Error(`Failed to enroll student in ${failedCourses.length} courses`);
-        }
+        await eduwallet.enrollStudent(uni, studentWallet, courses);
     } catch (error) {
         throw new Error(`${error}`);
     }
@@ -478,16 +464,7 @@ export async function evaluateStudent(studentWallet: string, evaluations: eduwal
         }
 
         // Use the SDK to record evaluations for the student
-        let failedCourses = await eduwallet.evaluateStudent(uni, studentWallet, evaluations);
-
-        // TODO: Implement retry logic for failed evaluations
-        // while (tx.length > 0) {
-        //     tx = await eduwallet.evaluateStudent(uni, studentWallet, evaluations);
-        // }
-
-        if (failedCourses.length > 0) {
-            throw new Error(`Failed to evaluate student in ${failedCourses.length} courses`);
-        }
+        await eduwallet.evaluateStudent(uni, studentWallet, evaluations);
     } catch (error) {
         throw new Error(`${error}`);
     }
@@ -514,10 +491,6 @@ export async function requestPermission(studentWallet: string, permission: eduwa
 
         // Use the SDK to request permission for the student's wallet
         await eduwallet.askForPermission(uni, studentWallet, permission);
-
-        if (VERBOSE) {
-            console.log(`Permission request submitted successfully`);
-        }
     } catch (error) {
         throw new Error(`${error}`);
     }

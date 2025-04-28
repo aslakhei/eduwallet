@@ -317,7 +317,7 @@ async function getStudentInfoCommand(): Promise<void> {
             await getStudentInfo(answers.wallet);
             spinner.succeed('Student information retrieved successfully');
         } catch (error) {
-            spinner.fail(`Failed to retrieve student info`);
+            spinner.fail(`Failed to retrieve student info. Check the address`);
             console.error("Student info retrieval error details:", error);
         }
     } catch (error) {
@@ -346,7 +346,7 @@ async function getStudentResultsCommand(): Promise<void> {
             await getStudentInfoResults(answers.wallet);
             spinner.succeed('Student information and results retrieved successfully');
         } catch (error) {
-            spinner.fail(`Failed to retrieve student info and results`);
+            spinner.fail(`Failed to retrieve student info and results. Check the address`);
             console.error("Student info and results retrieval error details:", error);
         }
     } catch (error) {
