@@ -46,14 +46,12 @@ contract Student is SmartAccount, AccessControlEnumerable {
     /**
      * @dev Represents evaluation information for a completed course
      * @param code Course code to identify which course is being evaluated
-     * @param university Address of the university providing the evaluation
      * @param grade Final grade assigned to the student
      * @param date Unix timestamp when the grade was assigned
      * @param certificateHash CID of the IPFS file representing the certificate
      */
     struct EvaluationInfo {
         string code;
-        address university;
         string grade;
         uint date;
         string certificateHash;
