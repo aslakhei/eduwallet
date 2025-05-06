@@ -17,10 +17,8 @@ export interface StudentEthWalletInfo {
 /**
  * Student authentication and academic wallet information.
  * Contains the credentials required for login and blockchain operations.
- * 
- * ! The production version must extend Omit<StudentEthWalletInfo, "ethWallet">. ethWallet is present to enable the interaction script to found the student's wallet.
  */
-export interface StudentCredentials extends StudentEthWalletInfo {
+export interface StudentCredentials extends Omit<StudentEthWalletInfo, "ethWallet"> {
     /** Ethereum address associated with the student's academic wallet. */
     readonly academicWalletAddress: string;
 }

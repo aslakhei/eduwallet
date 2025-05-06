@@ -1,5 +1,5 @@
 import type { Student as StudentInterface, University as UniversityInterface, AcademicResult, StudentEthWalletInfo } from "./types";
-import { blockchainConfig, ipfsConfig, logError, provider, s3Client } from "./conf";
+import { blockchainConfig, DEBUG, ipfsConfig, logError, provider, s3Client } from "./conf";
 import type { StudentsRegister } from '@typechain/contracts/StudentsRegister';
 import { StudentsRegister__factory } from "@typechain/factories/contracts/StudentsRegister__factory"
 import type { Student } from '@typechain/contracts/Student';
@@ -11,6 +11,12 @@ import utc from 'dayjs/plugin/utc.js';
 import { randomBytes, pbkdf2Sync } from 'node:crypto';
 import { readFileSync } from 'fs';
 import { Wallet } from 'ethers';
+import type { BaseContract, Result } from 'ethers';
+import { EntryPoint__factory } from '@typechain/factories/@account-abstraction/contracts/core/EntryPoint__factory';
+import type { EntryPoint } from '@typechain/@account-abstraction/contracts/core/EntryPoint';
+import type { University } from '@typechain/contracts/University';
+import { AccountAbstraction } from "./AccountAbstraction";
+
 
 /**
  * Creates a new wallet for a student with random credentials.
@@ -72,6 +78,41 @@ function derivePrivateKey(password: string, studentId: string): string {
 }
 
 /**
+ * Retrieves the EntryPoint contract instance.
+ * The EntryPoint is the central contract in ERC-4337 that manages account abstraction.
+ * @author Diego Da Giau
+ * @returns {EntryPoint} Connected EntryPoint contract instance
+ * @throws {Error} If connection to the contract fails
+ */
+export function getEntryPoint(): EntryPoint {
+    try {
+        return EntryPoint__factory.connect(blockchainConfig.entryPointAddress, provider);
+    } catch (error) {
+        logError('Failed to get EntryPoint contract:', error);
+        throw new Error('Failed to connect to EntryPoint contract: ' + (error instanceof Error ? error.message : String(error)));
+    }
+}
+
+/**
+ * Gets the smart account address associated with a university's EOA wallet.
+ * Retrieves the university's smart contract account address from the registry.
+ * @author Diego Da Giau
+ * @param {Wallet} universityEthWallet - University's Ethereum wallet
+ * @returns {Promise<string>} University's smart account contract address
+ * @throws {Error} If retrieval of the smart account address fails
+ */
+export async function getUniversityAccountAddress(universityEthWallet: Wallet): Promise<string> {
+    try {
+        const studentsRegister = getStudentsRegister();
+        const universityAccountAddress = await studentsRegister.connect(universityEthWallet).getUniversityAccount();
+        return universityAccountAddress;
+    } catch (error) {
+        logError('Failed to get University smart account address:', error);
+        throw new Error('Failed to retrieve University smart account address: ' + (error instanceof Error ? error.message : String(error)));
+    }
+}
+
+/**
  * Retrieves the StudentsRegister contract instance.
  * Central registry that manages student and university registrations.
  * @author Diego Da Giau
@@ -99,6 +140,23 @@ export function getStudentContract(contractAddress: string): Student {
     } catch (error) {
         logError('Failed to get Student contract:', error);
         throw new Error('Failed to connect to Student contract: ' + (error instanceof Error ? error.message : String(error)));
+    }
+}
+
+/**
+ * Gets a connected instance of a University contract for interaction.
+ * Used to interact with a university's smart account.
+ * @author Diego Da Giau
+ * @param {string} contractAddress - University smart account address
+ * @returns {University} Connected university contract instance
+ * @throws {Error} If connection to the contract fails
+ */
+export function getUniversitySmartAccount(contractAddress: string): University {
+    try {
+        return University__factory.connect(contractAddress, provider);
+    } catch (error) {
+        logError('Failed to get University contract:', error);
+        throw new Error('Failed to connect to University contract: ' + (error instanceof Error ? error.message : String(error)));
     }
 }
 
@@ -187,16 +245,15 @@ export async function publishCertificate(certificate: Buffer | string): Promise<
  * Generates a complete student object with academic results.
  * Fetches university information for each result and formats data.
  * @author Diego Da Giau
- * @param {Wallet} universityWallet - University wallet with read permissions
  * @param {Student.StudentBasicInfoStructOutput} student - Basic student information from contract
  * @param {Student.ResultStructOutput[]} results - Array of raw result data from contract
  * @returns {Promise<StudentInterface>} Complete student object with formatted results
  * @throws {Error} If a university cannot be found for a result
  */
-export async function generateStudent(universityWallet: Wallet, student: Student.StudentBasicInfoStructOutput, results: Student.ResultStructOutput[]): Promise<StudentInterface> {
+export async function generateStudent(student: Student.StudentBasicInfoStructOutput, results: Student.ResultStructOutput[]): Promise<StudentInterface> {
     try {
         // Get universities information for all results
-        const universities = await getUniversities(universityWallet, new Set(results.map(r => r.university)));
+        const universities = await getUniversities(new Set(results.map(r => r.university)));
 
         // Process each result with its university information
         const resultsDef = results.map(r => {
@@ -252,46 +309,52 @@ function generateResult(result: Student.ResultStructOutput, university: Universi
  * Retrieves information about multiple universities by their blockchain addresses.
  * Maps university addresses to their detailed information.
  * @author Diego Da Giau
- * @param {Wallet} universityWallet - Wallet with permissions to read university data
  * @param {Set<string>} universitiesAddresses - Set of university blockchain addresses
  * @returns {Promise<Map<string, University>>} Map of university addresses to university details
  */
-async function getUniversities(universityWallet: Wallet, universitiesAddresses: Set<string>): Promise<Map<string, UniversityInterface>> {
+async function getUniversities(universitiesAddresses: Set<string>): Promise<Map<string, UniversityInterface>> {
+    if (universitiesAddresses.size === 0) {
+        return new Map<string, UniversityInterface>();
+    }
+
     try {
-        // Get contract instance
-        const studentsRegister = getStudentsRegister();
-
-        // Convert set to array for contract call
-        const universitiesArray = Array.from(universitiesAddresses);
-
-        // Get university wallet addresses from the registry
-        const universitiesContract = await studentsRegister
-            .connect(universityWallet)
-            .getUniversitiesWallets(universitiesArray);
-
-        if (!universitiesContract || universitiesContract.length !== universitiesArray.length) {
-            throw new Error('Failed to retrieve all university contracts');
-        }
-
         // Create a map to store university details by address
-        const universities = new Map<string, UniversityInterface>();
+        const universitiesPromises = new Map<string, Promise<UniversityInterface>>();
 
-        // Fetch details for each university
-        for (let i = 0; i < universitiesContract.length; i++) {
+        for (let address of universitiesAddresses) {
             try {
-                universities.set(
-                    universitiesArray[i],
-                    await getUniversity(universityWallet, universitiesContract[i])
+                universitiesPromises.set(
+                    address,
+                    getUniversity(address)
                 );
-            } catch (error) {
-                logError(`Failed to get university data for ${universitiesArray[i]}:`, error);
+            } catch (uniError: any) {
+                logError(`Failed to get university data for ${address}:`, uniError);
                 // Continue with other universities instead of failing completely
             }
         }
 
-        if (universities.size === 0) {
-            throw new Error('Failed to retrieve any university information');
-        }
+        // Resolve all promises in parallel and create the result map
+        const results = await Promise.allSettled([...universitiesPromises.entries()].map(
+            async ([address, promise]) => {
+                try {
+                    const university = await promise;
+                    return [address, university];
+                } catch (promError: any) {
+                    logError(`Failed to get university data for ${address}:`, promError);
+                    return null;
+                }
+            }
+        ));
+
+        // Process results and create the universities map
+        const universities = new Map<string, UniversityInterface>();
+
+        results
+            .filter(result => result.status === 'fulfilled' && result.value !== null)
+            .forEach(result => {
+                const [address, university] = (result as PromiseFulfilledResult<[string, UniversityInterface]>).value;
+                universities.set(address, university);
+            });
 
         return universities;
     } catch (error) {
@@ -301,24 +364,25 @@ async function getUniversities(universityWallet: Wallet, universitiesAddresses: 
 }
 
 /**
- * Retrieves information about a single university.
- * Connects to the university's contract and fetches its details.
+ * Retrieves detailed information about a specific university.
+ * Connects to the university's smart contract and fetches its public information.
  * @author Diego Da Giau
- * @param {Wallet} universityWallet - Wallet with permissions to read university data
- * @param {string} universityContractAddress - Address of the university's contract
- * @returns {Promise<University>} University details
+ * @param {string} universityAccountAddress - University smart contract address
+ * @returns {Promise<UniversityInterface>} University details including name and location
+ * @throws {Error} If university information cannot be retrieved
  */
-async function getUniversity(universityWallet: Wallet, universityContractAddress: string): Promise<UniversityInterface> {
+async function getUniversity(universityAccountAddress: string): Promise<UniversityInterface> {
     try {
         // Connect to university contract
-        const contract = University__factory.connect(universityContractAddress, provider);
+        const contract = University__factory.connect(universityAccountAddress, provider);
 
         // Fetch university information
         const {
             name,
             country,
             shortName
-        } = await contract.connect(universityWallet).getUniversityInfo();
+        } = await contract.getUniversityInfo();
+
         // Return formatted university object
         return {
             name,
@@ -326,7 +390,96 @@ async function getUniversity(universityWallet: Wallet, universityContractAddress
             shortName,
         };
     } catch (error) {
-        logError(`Failed to get university at address ${universityContractAddress}:`, error);
+        logError(`Failed to get university at address ${universityAccountAddress}:`, error);
         throw new Error('Failed to retrieve university details: ' + (error instanceof Error ? error.message : String(error)));
+    }
+}
+
+/**
+ * Sends a transaction through a university's smart account using account abstraction.
+ * Creates and executes a user operation that calls a specific function on a target contract.
+ * @author Diego Da Giau
+ * @param {Wallet} universityEthWallet - University's Ethereum wallet (EOA)
+ * @param {BaseContract} targetContract - Contract instance to interact with
+ * @param {string} targetContractAddress - Address of the target contract
+ * @param {string} functionName - Name of the function to call
+ * @param {any[]} params - Parameters to pass to the function
+ * @returns {Promise<void>}
+ * @throws {Error} If transaction execution fails
+ */
+export async function sendTransaction(universityEthWallet: Wallet, targetContract: BaseContract, targetContractAddress: string, functionName: string, params: any[]): Promise<void> {
+    try {
+        const connectedUniversity = universityEthWallet.connect(provider);
+
+        const smartAccountAddress = await getUniversityAccountAddress(connectedUniversity);
+
+        // Initialize account abstraction manager
+        const accountAbstraction = new AccountAbstraction(
+            provider,
+            universityEthWallet
+        );
+
+        // Create contract interface for test contract
+        const targetContractInterface = targetContract.interface;
+
+        const callData = targetContractInterface.encodeFunctionData(functionName, params);
+
+        // Create user operation
+        const userOp = await accountAbstraction.createUserOp({
+            sender: smartAccountAddress,
+            target: targetContractAddress,
+            value: 0n,
+            data: callData,
+        });
+
+        // Execute the operation
+        const tx = await accountAbstraction.executeUserOps([userOp], connectedUniversity.address);
+        const receipt = await tx.wait();
+        if (receipt) {
+            accountAbstraction.verifyTransaction(receipt, targetContract);
+        }
+    } catch (error) {
+        logError(`Failed to transaction ${functionName}:`, error);
+        throw new Error(error instanceof Error ? error.message : String(error));
+    }
+}
+
+/**
+ * Executes a view (read-only) function call through a university's smart account.
+ * This allows read operations that respect access control rules in the smart contracts.
+ * @author Diego Da Giau
+ * @param {Wallet} universityEthWallet - University's Ethereum wallet (EOA)
+ * @param {BaseContract} targetContract - Contract instance to interact with
+ * @param {string} targetContractAddress - Address of the target contract
+ * @param {string} functionName - Name of the view function to call
+ * @param {any[]} params - Parameters to pass to the function
+ * @returns {Promise<Result>} Decoded results from the function call
+ * @throws {Error} If the view call fails
+ */
+export async function executeSmartAccountViewCall(universityEthWallet: Wallet, targetContract: BaseContract, targetContractAddress: string, functionName: string, params: any[]): Promise<Result> {
+    try {
+        const connectedUniversity = universityEthWallet.connect(provider);
+
+        // Create a contract instance for the smart account
+        const smartAccountAddress = await getUniversityAccountAddress(connectedUniversity);
+        const smartAccount = getUniversitySmartAccount(smartAccountAddress);
+
+        // Encode the function call
+        const calldata = targetContract.interface.encodeFunctionData(functionName, params);
+
+        // Execute the view call through the smart account
+        const results = await smartAccount.connect(connectedUniversity).executeViewCall(targetContractAddress, calldata);
+
+        // Decode the result
+        const decodedResults = targetContract.interface.decodeFunctionResult(functionName, results);
+
+        if (DEBUG) {
+            console.log("DEC RES = ", decodedResults);
+        }
+
+        return decodedResults;
+    } catch (error) {
+        logError('Smart account view call failed:', error);
+        throw new Error(`Failed to execute view call to ${functionName}`);
     }
 }
