@@ -16,9 +16,7 @@ error PermissionAlreadyGiven();
  * @notice Manages a student's academic records and university permissions
  * @dev Implements role-based access control for universities to manage student records
  *
- * TODO: Add input validation. Add events if necessary. Change require with if statements, revert and custom errors. See library for the validation part.
- * ? Enroll and Evaluate with an array of struct as parameter?
- * ? Why students have a different function than universities to fetch information?
+ * TODO: Add input validation. Change require with if statements, revert and custom errors. See library for the validation part.
  */
 contract Student is SmartAccount, AccessControlEnumerable {
     // Role definitions for access control
@@ -125,7 +123,7 @@ contract Student is SmartAccount, AccessControlEnumerable {
         studentInfo.basicInfo = _basicInfo;
 
         // Set the student as admin of the wallet
-        _grantRole(DEFAULT_ADMIN_ROLE, _student);
+        _grantRole(DEFAULT_ADMIN_ROLE, address(this));
         // Give to the university the permissions to write
         _grantRole(WRITER_ROLE, _university);
     }

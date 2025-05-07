@@ -32,7 +32,7 @@ export default function Homepage(): JSX.Element {
     // Set first university as active when data is loaded
     useEffect(() => {
         if (universities.length > 0) {
-            setActiveUniversity(universities[0].universityAddress);
+            setActiveUniversity(universities[0].accountAddress);
         }
     }, [universities.length]);
 
@@ -62,10 +62,13 @@ export default function Homepage(): JSX.Element {
             {/* Results part */}
             <Container>
                 <Row className="mt-3 mb-2">
-                    {universities.filter(u => student.getResultsByUniversity(u.universityAddress).length > 0).map(u => <UniversityButton key={u.universityAddress} university={u} activeUniversity={activeUniversity} setActiveUniversity={setActiveUniversity} />)}
+                    {universities.filter(u => student.getResultsByUniversity(u.accountAddress).length > 0).map(u => <UniversityButton key={u.accountAddress} university={u} activeUniversity={activeUniversity} setActiveUniversity={setActiveUniversity} />)}
                 </Row>
                 <Container className="p-0 main-content courses-list">
-                    <UniversityResults results={student.getResultsByUniversityGroupedByCourseDegree(activeUniversity)} />
+                    {student.getResults().length === 0 ?
+                        "Still no academic records to show" :
+                        <UniversityResults results={student.getResultsByUniversityGroupedByCourseDegree(activeUniversity)} />
+                    }
                 </Container>
             </Container>
         </>
@@ -84,8 +87,8 @@ function UniversityButton(props: UniversityButtonProps): JSX.Element {
     const setActiveUniversity = props.setActiveUniversity;
 
     return (
-        <Col className={"text-center" + " " + (activeUniversity === university.universityAddress ? "underline" : "")}>
-            <div className="menu-option" onClick={() => setActiveUniversity(university.universityAddress)}>{university.shortName}</div>
+        <Col className={"text-center" + " " + (activeUniversity === university.accountAddress ? "underline" : "")}>
+            <div className="menu-option" onClick={() => setActiveUniversity(university.accountAddress)}>{university.shortName}</div>
         </Col>
     );
 }

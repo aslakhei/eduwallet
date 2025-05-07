@@ -98,7 +98,7 @@ export default function PermissionsProvider({ children }: { children: React.Reac
      */
     const updatePermissions = async (permission: Permission): Promise<void> => {
         try {
-            const transaction = await performAction(student, permission);
+            const transaction = performAction(student, permission);
 
             if (permission.request) {
                 // Remove from requests when approving
@@ -131,7 +131,7 @@ export default function PermissionsProvider({ children }: { children: React.Reac
                         throw Error("Unknown perission type.");
                 }
             }
-            await transaction.wait();
+            await transaction;
         } catch (error) {
             revertUpdate(permission);
             const errorMessage = error instanceof Error ? error.message : "Failed to load permissions";

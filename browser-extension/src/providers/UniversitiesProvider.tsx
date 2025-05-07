@@ -66,7 +66,7 @@ export default function UniversitiesProvider({ children }: { children: React.Rea
      */
     const updateUniversities = async (universitiesAddresses: string[]): Promise<void> => {
         try {
-            const universitiesSet = new Set(universities.map(u => u.universityAddress));
+            const universitiesSet = new Set(universities.map(u => u.accountAddress));
             const filteredAddresses = universitiesAddresses.filter(a => !universitiesSet.has(a));
             const universitiesTmp = await getUniversities(student, filteredAddresses);
             setUniversities(old => [...old, ...universitiesTmp]);

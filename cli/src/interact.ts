@@ -1,5 +1,5 @@
 import { JsonRpcProvider, Wallet, NonceManager, parseEther } from 'ethers';
-import * as crypto from 'crypto';
+import { randomBytes, pbkdf2Sync } from 'node:crypto';
 import type { Paymaster, StudentDeployer, StudentsRegister, UniversityDeployer } from '@typechain/contracts';
 import { StudentsRegister__factory } from "@typechain/factories/contracts/StudentsRegister__factory"
 import { StudentDeployer__factory } from '@typechain/factories/contracts/StudentDeployer__factory';
@@ -235,7 +235,7 @@ function logDeploymentAddresses(
 function getUniversityWallet(): Wallet {
     try {
         // Generate a random private key for the university
-        const privateKey = crypto.randomBytes(32).toString('hex');
+        const privateKey = randomBytes(32).toString('hex');
         const universityPrivateKey = `0x${privateKey}`;
         const wallet = new Wallet(universityPrivateKey, PROVIDER);
 
@@ -331,6 +331,16 @@ export async function registerStudent(name: string, surname: string, birthDate: 
                 country,
             });
 
+        // Fund student's ETH wallet
+        const studentEthWallet = await getStudentWallet(student.id, student.password);
+
+        const fundTx = await deployer.sendTransaction({
+            to: studentEthWallet.address,
+            value: parseEther('10000'),
+        });
+
+        await fundTx.wait();
+
         // Display student credentials
         console.log(`\n---------------------------------------------------`);
         console.log(`STUDENT:`);
@@ -340,6 +350,53 @@ export async function registerStudent(name: string, surname: string, birthDate: 
         console.log(`---------------------------------------------------\n`);
     } catch (error) {
         throw new Error(`${error}`);
+    }
+}
+
+/**
+ * Creates a student wallet using deterministic key derivation from credentials.
+ * Uses the student ID and password to derive a consistent private key.
+ * @author Diego Da Giau
+ * @param {string} id - The student's unique identifier, used as salt in key derivation
+ * @param {string} password - The student's password for key derivation
+ * @returns {Promise<Wallet>} Ethereum wallet instance connected to the provider
+ * @throws {Error} If credentials are missing or key derivation fails
+ */
+export async function getStudentWallet(id: string, password: string): Promise<Wallet> {
+    try {
+        if (!password || !id) {
+            throw new Error('Invalid credentials: Missing password or ID');
+        }
+        const privateKey = derivePrivateKey(password, id);
+        return new Wallet(privateKey);
+    } catch (error) {
+        throw new Error('Could not create student wallet from credentials');
+    }
+}
+
+/**
+ * Derives a deterministic private key from a password and student ID using PBKDF2.
+ * This creates a reproducible key that can be reconstructed with the same inputs,
+ * allowing students to access their wallets consistently across sessions.
+ * @author Diego Da Giau
+ * @param {string} password - User password for key derivation
+ * @param {string} studentId - Student ID used as salt in the derivation process
+ * @returns {string} Ethereum-compatible private key with 0x prefix
+ * @throws {Error} If the key derivation process fails
+ */
+function derivePrivateKey(password: string, studentId: string): string {
+    try {
+        // Number of PBKDF2 iterations for security
+        const iterations = 100000;
+
+        // 32 bytes = 256 bits for Ethereum compatibility
+        const keyLength = 32;
+
+        const derivedKey = pbkdf2Sync(password, studentId, iterations, keyLength, 'sha256').toString('hex');
+        // Add Ethereum hex prefix
+        return '0x' + derivedKey;
+    } catch (error) {
+        throw new Error('Failed to derive private key: ' + (error instanceof Error ? error.message : String(error)));
     }
 }
 
