@@ -43,9 +43,15 @@ const validateDate = (input: string): string | boolean => {
         return 'Please enter a valid date';
     }
 
+    // Check if the date is after Unix epoch (1970-01-01)
+    const unixEpoch = new Date('1970-01-01');
+    if (date < unixEpoch) {
+        return 'The date must be on or after January 1, 1970';
+    }
+
     // Check if the date is in the past
     if (date > new Date()) {
-        return 'Date cannot be in the future';
+        return 'The date cannot be in the future';
     }
 
     // Input is valid
@@ -180,6 +186,18 @@ const validateGrade = (input: string): string | boolean => {
     return true;
 };
 
+async function getStudentAddress(): Promise<string> {
+    const answers = await inquirer.prompt([
+        {
+            type: 'input',
+            name: 'address',
+            message: "Enter the student's academic wallet address (0x...):",
+            validate: validateAddress,
+        },
+    ]);
+    return answers.address as string;
+}
+
 /**
  * Deploys the core Students Register contract to the blockchain.
  * This contract serves as the entry point for the academic credential system.
@@ -207,25 +225,25 @@ async function deployRegisterContract(): Promise<void> {
  * @author Diego Da Giau
  * @returns {Promise<void>} Promise that resolves when the university is successfully subscribed or fails
  */
-async function subscribeUniversityCommand(): Promise<void> {
+async function registerUniversityCommand(): Promise<void> {
     try {
         const answers = await inquirer.prompt([
             {
                 type: 'input',
                 name: 'name',
-                message: 'Enter university name:',
+                message: 'Enter the university name:',
                 validate: validateLongString,
             },
             {
                 type: 'input',
                 name: 'country',
-                message: 'Enter university country:',
+                message: 'Enter the university country:',
                 validate: validateString,
             },
             {
                 type: 'input',
                 name: 'shortName',
-                message: 'Enter university short name:',
+                message: 'Enter the university short name:',
                 validate: validateShortName,
             },
         ]);
@@ -234,11 +252,11 @@ async function subscribeUniversityCommand(): Promise<void> {
             await subscribeUniversity(answers.name, answers.country, answers.shortName);
             spinner.succeed('University subscribed successfully!');
         } catch (error) {
-            spinner.fail(`Failed to subscribe university`);
-            console.error("University subscription error details:", error);
+            spinner.fail(`Failed to subscribe the university`);
+            console.error('University subscription error details:', error);
         }
     } catch (error) {
-        console.error("Failed to collect university information:", error);
+        console.error('Failed to collect university information:', error);
     }
 }
 
@@ -254,31 +272,31 @@ async function registerStudentCommand(): Promise<void> {
             {
                 type: 'input',
                 name: 'name',
-                message: 'Enter student first name:',
+                message: "Enter the student's first name:",
                 validate: validateString,
             },
             {
                 type: 'input',
                 name: 'surname',
-                message: 'Enter student second name:',
+                message: "Enter student's second name:",
                 validate: validateString,
             },
             {
                 type: 'input',
                 name: 'birthDate',
-                message: 'Enter student date of birth (YYYY-MM-DD):',
+                message: "Enter the student's date of birth (YYYY-MM-DD):",
                 validate: validateDate,
             },
             {
                 type: 'input',
                 name: 'birthPlace',
-                message: 'Enter student place of birth:',
+                message: "Enter the student's place of birth:",
                 validate: validateString,
             },
             {
                 type: 'input',
                 name: 'country',
-                message: 'Enter student country of birth:',
+                message: "Enter the student's country of birth:",
                 validate: validateString,
             },
         ]);
@@ -288,11 +306,11 @@ async function registerStudentCommand(): Promise<void> {
             await registerStudent(answers.name, answers.surname, answers.birthDate, answers.birthPlace, answers.country);
             spinner.succeed('Student registered successfully!');
         } catch (error) {
-            spinner.fail(`Failed to register student`);
-            console.error("Student registration error details:", error);
+            spinner.fail(`Failed to register the student`);
+            console.error('Student registration error details:', error);
         }
     } catch (error) {
-        console.error("Failed to collect student information:", error);
+        console.error('Failed to collect student information:', error);
     }
 }
 
@@ -304,24 +322,18 @@ async function registerStudentCommand(): Promise<void> {
  */
 async function getStudentInfoCommand(): Promise<void> {
     try {
-        const answers = await inquirer.prompt([
-            {
-                type: 'input',
-                name: 'wallet',
-                message: 'Enter student academic wallet address (0x...):',
-                validate: validateAddress,
-            },
-        ]);
-        const spinner = ora('Retrieving the student info...').start();
+        const address = await getStudentAddress();
+
+        const spinner = ora("Retrieving the student's personal details...").start();
         try {
-            await getStudentInfo(answers.wallet);
-            spinner.succeed('Student information retrieved successfully');
+            await getStudentInfo(address);
+            spinner.succeed("Student's personal details retrieved successfully");
         } catch (error) {
-            spinner.fail(`Failed to retrieve student info. Check the address`);
-            console.error("Student info retrieval error details:", error);
+            spinner.fail(`Failed to retrieve the student's personal details. Check the address`);
+            console.error('Student info retrieval error details:', error);
         }
     } catch (error) {
-        console.error("Failed to collect wallet address:", error);
+        console.error('Failed to collect wallet address:', error);
     }
 }
 
@@ -333,24 +345,18 @@ async function getStudentInfoCommand(): Promise<void> {
  */
 async function getStudentResultsCommand(): Promise<void> {
     try {
-        const answers = await inquirer.prompt([
-            {
-                type: 'input',
-                name: 'wallet',
-                message: 'Enter student academic wallet address (0x...):',
-                validate: validateAddress,
-            },
-        ]);
-        const spinner = ora('Retrieving the student info and results...').start();
+        const address = await getStudentAddress();
+
+        const spinner = ora("Retrieving the student's personal details and the academic results...").start();
         try {
-            await getStudentInfoResults(answers.wallet);
-            spinner.succeed('Student information and results retrieved successfully');
+            await getStudentInfoResults(address);
+            spinner.succeed("Student's personal details and academic results retrieved successfully");
         } catch (error) {
-            spinner.fail(`Failed to retrieve student info and results. Check the address`);
-            console.error("Student info and results retrieval error details:", error);
+            spinner.fail("Failed to retrieve student's personal details and the academic results. Check the address or your permission");
+            console.error('Student info and results retrieval error details:', error);
         }
     } catch (error) {
-        console.error("Failed to collect wallet address:", error);
+        console.error('Failed to collect wallet address:', error);
     }
 }
 
@@ -364,14 +370,7 @@ async function getStudentResultsCommand(): Promise<void> {
 async function enrollStudentCommand(): Promise<void> {
     try {
         // Get student wallet address
-        const student = await inquirer.prompt([
-            {
-                type: 'input',
-                name: 'wallet',
-                message: 'Enter student academic wallet address (0x...):',
-                validate: validateAddress,
-            },
-        ]);
+        const address = await getStudentAddress();
 
         // Collection of courses to enroll the student in
         const courses: eduwallet.CourseInfo[] = [];
@@ -411,7 +410,7 @@ async function enrollStudentCommand(): Promise<void> {
                     code: answers.code,
                     name: answers.name,
                     degreeCourse: answers.degreeCourse,
-                    ects: parseInt(answers.ects),
+                    ects: parseFloat(answers.ects),
                 });
 
                 // Check if user wants to add more courses or proceed with enrollment
@@ -432,26 +431,26 @@ async function enrollStudentCommand(): Promise<void> {
                     break;
                 }
             } catch (error) {
-                console.error("Error while collecting course information:", error);
+                console.error('Error while collecting course information:', error);
             }
         }
 
         // Process enrollment with visual feedback
         if (courses.length === 0) {
-            console.log("No courses added. Enrollment cancelled.");
+            console.log('No courses added. Enrollment cancelled.');
             return;
         }
 
         const spinner = ora('Enrolling the student...').start();
         try {
-            await enrollStudent(student.wallet, courses);
+            await enrollStudent(address, courses);
             spinner.succeed('Student enrolled successfully');
         } catch (error) {
-            spinner.fail(`Failed to enroll student`);
-            console.error("Student enrollment error details:", error);
+            spinner.fail(`Failed to enroll the student`);
+            console.error('Student enrollment error details:', error);
         }
     } catch (error) {
-        console.error("Failed to complete enrollment process:", error);
+        console.error('Failed to complete enrollment process:', error);
     }
 }
 
@@ -465,15 +464,9 @@ async function enrollStudentCommand(): Promise<void> {
 async function evaluateStudentCommand(): Promise<void> {
     try {
         // Get student wallet address
+        const address = await getStudentAddress();
+
         const evaluations: eduwallet.Evaluation[] = [];
-        const student = await inquirer.prompt([
-            {
-                type: 'input',
-                name: 'wallet',
-                message: 'Enter student academic wallet address (0x...):',
-                validate: validateAddress,
-            },
-        ]);
 
         // Continue collecting evaluation information until user chooses to submit
         while (true) {
@@ -519,7 +512,7 @@ async function evaluateStudentCommand(): Promise<void> {
                         name: 'action',
                         message: 'What would you like to do?',
                         choices: [
-                            'Add another evaluation',
+                            'Add another record',
                             'Evaluate',
                         ]
                     }
@@ -530,26 +523,26 @@ async function evaluateStudentCommand(): Promise<void> {
                     break;
                 }
             } catch (error) {
-                console.error("Error while collecting evaluation information:", error);
+                console.error('Error while collecting evaluation information:', error);
             }
         }
 
         // Process evaluations with visual feedback
         if (evaluations.length === 0) {
-            console.log("No evaluations added. Evaluation cancelled.");
+            console.log('No evaluations added. Evaluation cancelled.');
             return;
         }
 
         const spinner = ora('Evaluating the student...').start();
         try {
-            await evaluateStudent(student.wallet, evaluations);
+            await evaluateStudent(address, evaluations);
             spinner.succeed('Student evaluated successfully');
         } catch (error) {
             spinner.fail(`Failed to evaluate student`);
-            console.error("Student evaluation error details:", error);
+            console.error('Student evaluation error details:', error);
         }
     } catch (error) {
-        console.error("Failed to complete evaluation process:", error);
+        console.error('Failed to complete evaluation process:', error);
     }
 }
 
@@ -562,14 +555,11 @@ async function evaluateStudentCommand(): Promise<void> {
  */
 async function requestPermissionCommand(): Promise<void> {
     try {
-        // Get student wallet address and permission type
+        // Get student wallet address
+        const address = await getStudentAddress();
+
+        // Get permission type
         const answers = await inquirer.prompt([
-            {
-                type: 'input',
-                name: 'wallet',
-                message: 'Enter student academic wallet address (0x...):',
-                validate: validateAddress,
-            },
             {
                 type: 'list',
                 name: 'action',
@@ -597,14 +587,14 @@ async function requestPermissionCommand(): Promise<void> {
         // Process permission request with visual feedback
         const spinner = ora(`Requesting the ${answers.action} permission...`).start();
         try {
-            await requestPermission(answers.wallet, permission);
+            await requestPermission(address, permission);
             spinner.succeed('Permission requested successfully');
         } catch (error) {
-            spinner.fail(`Failed to request permission`);
-            console.error("Permission request error details:", error);
+            spinner.fail('Failed to request permission');
+            console.error('Permission request error details:', error);
         }
     } catch (error) {
-        console.error("Failed to collect permission request information:", error);
+        console.error('Failed to collect permission request information:', error);
     }
 }
 
@@ -617,26 +607,19 @@ async function requestPermissionCommand(): Promise<void> {
 async function verifyPermissionCommand(): Promise<void> {
     try {
         // Get student wallet address
-        const answers = await inquirer.prompt([
-            {
-                type: 'input',
-                name: 'wallet',
-                message: 'Enter student academic wallet address (0x...):',
-                validate: validateAddress,
-            },
-        ]);
+        const address = await getStudentAddress();
 
         // Process verification with visual feedback
-        const spinner = ora(`Verifying available permission...`).start();
+        const spinner = ora(`Verifying the available permission...`).start();
         try {
-            await verifyPermission(answers.wallet);
+            await verifyPermission(address);
             spinner.succeed('Permission verified successfully');
         } catch (error) {
-            spinner.fail(`Failed to verify permission`);
-            console.error("Permission verification error details:", error);
+            spinner.fail('Failed to verify the permission');
+            console.error('Permission verification error details:', error);
         }
     } catch (error) {
-        console.error("Failed to collect wallet address:", error);
+        console.error('Failed to collect wallet address:', error);
     }
 }
 
@@ -659,16 +642,16 @@ async function changeUniversityCommand(): Promise<void> {
         ]);
 
         // Process university change with visual feedback
-        const spinner = ora(`Changing university...`).start();
+        const spinner = ora('Changing the current university...').start();
         try {
             changeUniversity(new Wallet(answers.privateKey));
-            spinner.succeed('University changed successfully');
+            spinner.succeed('Current university changed successfully');
         } catch (error) {
-            spinner.fail(`Failed to change university`);
-            console.error("University change error details:", error);
+            spinner.fail('Failed to change the current university');
+            console.error('University change error details:', error);
         }
     } catch (error) {
-        console.error("Failed to collect university private key:", error);
+        console.error('Failed to collect university private key:', error);
     }
 }
 
@@ -688,21 +671,21 @@ async function mainMenu(): Promise<void> {
             if (uni) {
                 // Full menu when university wallet is configured
                 choices = [
-                    'Subscribe a university',
+                    'Register a university',
                     'Register a student',
-                    "Get student basic information",
-                    "Get student basic information and results",
+                    "Get student's personal details",
+                    "Get student's personal details and academic results",
                     'Enroll a student',
-                    'Evaluate a student',
+                    'Record student evaluation',
                     'Request permission from a student',
                     'Verify permission for a student',
-                    'Change university',
+                    'Change current university',
                     'Exit'
                 ];
             } else {
                 // Limited menu when no university wallet is configured
                 choices = [
-                    'Subscribe a university',
+                    'Register a university',
                     'Exit'
                 ];
             }
@@ -718,22 +701,22 @@ async function mainMenu(): Promise<void> {
 
             // Process user selection and execute corresponding command
             switch (action.action) {
-                case 'Subscribe a university':
-                    await subscribeUniversityCommand();
+                case 'Register a university':
+                    await registerUniversityCommand();
                     break;
                 case 'Register a student':
                     await registerStudentCommand();
                     break;
-                case "Get student basic information":
+                case "Get student's personal details":
                     await getStudentInfoCommand();
                     break;
-                case "Get student basic information and results":
+                case "Get student's personal details and academic results":
                     await getStudentResultsCommand();
                     break;
                 case 'Enroll a student':
                     await enrollStudentCommand();
                     break;
-                case 'Evaluate a student':
+                case 'Record student evaluation':
                     await evaluateStudentCommand();
                     break;
                 case 'Request permission from a student':
@@ -742,7 +725,7 @@ async function mainMenu(): Promise<void> {
                 case 'Verify permission for a student':
                     await verifyPermissionCommand();
                     break;
-                case 'Change university':
+                case 'Change current university':
                     await changeUniversityCommand();
                     break;
                 case 'Exit':
@@ -754,8 +737,8 @@ async function mainMenu(): Promise<void> {
                     break;
             }
         } catch (error) {
-            console.error("An unexpected error occurred in the main menu:", error);
-            console.log("Restarting menu...");
+            console.error('An unexpected error occurred in the main menu:', error);
+            console.log('Restarting menu...');
         }
     }
 }
@@ -763,11 +746,11 @@ async function mainMenu(): Promise<void> {
 // Main execution starts here
 async function main() {
     try {
-        console.log(figlet.textSync("EduWallet"));
+        console.log(figlet.textSync('EduWallet'));
         await deployRegisterContract();
         await mainMenu();
     } catch (error) {
-        console.error("A critical error occurred:", error);
+        console.error('A critical error occurred:', error);
         process.exit(1);
     }
 }
