@@ -63,10 +63,7 @@ export async function registerStudent(universityWallet: Wallet, student: Student
 
         const connectedStudent = studentEthWallet.ethWallet.connect(provider);
 
-        // Calculate salt based on the student's wallet address
-        const salt = keccak256(toUtf8Bytes(connectedStudent.address));
-
-        await sendTransaction(universityWallet, studentsRegister, blockchainConfig.registerAddress, 'registerStudent', [connectedStudent.address, basicInfo, salt]);
+        await sendTransaction(universityWallet, studentsRegister, blockchainConfig.registerAddress, 'registerStudent', [connectedStudent.address, basicInfo]);
 
         const studentAccountAddress = await studentsRegister.connect(connectedStudent).getStudentAccount();
 

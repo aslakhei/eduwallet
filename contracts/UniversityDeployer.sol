@@ -22,7 +22,7 @@ contract UniversityDeployer {
      * @param _entryPoint EntryPoint contract address used by the account abstraction layer
      * @return address The deployed University contract address
      */
-    function createUniversity(
+    function deploy(
         address _address,
         string calldata _name,
         string calldata _country,

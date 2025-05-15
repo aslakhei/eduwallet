@@ -77,7 +77,7 @@ contract StudentsRegister is AccessControl {
         );
 
         // Deploy university account contract
-        address addr = universityDeployer.createUniversity(
+        address addr = universityDeployer.deploy(
             _address,
             _name,
             _country,
@@ -109,13 +109,11 @@ contract StudentsRegister is AccessControl {
      * @dev Only callable by addresses with UNIVERSITY_ROLE
      * @param _student Address of the student to register
      * @param _basicInfo Struct containing core biographical student's info
-     * @param _salt Unique bytes32 value to ensure deterministic address generation
      * @custom:throws AlreadyExistingStudent if student is already registered
      */
     function registerStudent(
         address _student,
-        Student.StudentBasicInfo calldata _basicInfo,
-        bytes32 _salt
+        Student.StudentBasicInfo calldata _basicInfo
     ) external onlyRole(UNIVERSITY_ROLE) {
         // Check if student is not already registered
         require(!hasRole(STUDENT_ROLE, _student), AlreadyExistingStudent());
@@ -125,8 +123,7 @@ contract StudentsRegister is AccessControl {
             _msgSender(),
             _student,
             _basicInfo,
-            address(entryPoint),
-            _salt
+            entryPoint
         );
 
         // Store student's contract address and grant student role
