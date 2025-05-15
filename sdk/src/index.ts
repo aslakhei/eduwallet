@@ -3,7 +3,7 @@ import type { Wallet } from "ethers";
 import type { CourseInfo, Evaluation, Student, StudentCredentials, StudentData } from "./types";
 import { PermissionType } from "./types";
 import { computeDate, createStudentWallet, executeSmartAccountViewCall, generateStudent, getStudentContract, getStudentsRegister, getUniversityAccountAddress, publishCertificate, sendTransaction } from "./utils";
-import { blockchainConfig, logError, provider, roleCodes } from "./conf";
+import { blockchainConfig, DEBUG, logError, provider, roleCodes } from "./conf";
 import dayjs from "dayjs";
 import utc from 'dayjs/plugin/utc.js';
 import type { Student as StudentContract } from '@typechain/contracts/Student';
@@ -40,6 +40,10 @@ export async function registerStudent(universityWallet: Wallet, student: Student
 
         if (!student.name || !student.surname || !student.birthDate || !student.birthPlace || !student.country) {
             throw new Error('Student data is incomplete - all fields are required');
+        }
+
+        if (new Date(student.birthDate) < new Date('1970-01-01')) {
+            throw new Error('Student birthdate is incompatible - the date must be on or after 1970-01-01')
         }
 
         // Get contract instance
@@ -121,7 +125,7 @@ export async function enrollStudent(universityWallet: Wallet, studentWalletAddre
                 code: c.code,
                 name: c.name,
                 degreeCourse: c.degreeCourse,
-                ects: c.ects,
+                ects: c.ects*100,
             };
         });
 
@@ -168,6 +172,9 @@ export async function evaluateStudent(universityWallet: Wallet, studentWalletAdd
             }
             if (!evaluation.evaluationDate) {
                 throw new Error(`Evaluation at index ${index} missing required field: evaluationDate`);
+            }
+            if (new Date(evaluation.evaluationDate) < new Date('1970-01-01')) {
+                throw new Error('Student birthdate is incompatible - the date must be on or after 1970-01-01')
             }
         });
 
@@ -231,12 +238,16 @@ export async function getStudentInfo(universityWallet: Wallet, studentWalletAddr
         // Fetch student's basic information
         const student = await studentWallet.getStudentBasicInfo();
 
+        if (DEBUG) {
+            console.log('Student: ', student);
+        }
+
         // Validate retrieved data
         if (
             !student ||
             !student.name ||
             !student.surname ||
-            !student.birthDate ||
+            student.birthDate === undefined ||
             !student.birthPlace ||
             !student.country
         ) {
@@ -285,7 +296,7 @@ export async function getStudentWithResult(universityWallet: Wallet, studentWall
 
         // Fetch student data and results in parallel for efficiency
         const [student, results] = await Promise.all([
-            studentAccount.getStudentBasicInfo(),
+            getStudentInfo(universityWallet, studentWalletAddress),
             executeSmartAccountViewCall(connectedUniversity, studentAccount, studentWalletAddress, 'getResults', []),
         ]);
 

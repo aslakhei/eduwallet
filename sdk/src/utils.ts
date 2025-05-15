@@ -165,11 +165,11 @@ export function getUniversitySmartAccount(contractAddress: string): University {
  * Handles the conversion from Unix epoch seconds to JavaScript milliseconds.
  * @author Diego Da Giau
  * @param {bigint} date - Unix timestamp as BigInt
- * @returns {string} ISO formatted date string
+ * @returns {string} Date formatted as 'YYYY-MM-DD'
  */
 export function computeDate(date: bigint): string {
     dayjs.extend(utc);
-    return dayjs.utc(Number(date) * 1000).toISOString();
+    return dayjs.utc(Number(date) * 1000).format('YYYY-MM-DD');
 }
 
 /**
@@ -245,12 +245,12 @@ export async function publishCertificate(certificate: Buffer | string): Promise<
  * Generates a complete student object with academic results.
  * Fetches university information for each result and formats data.
  * @author Diego Da Giau
- * @param {Student.StudentBasicInfoStructOutput} student - Basic student information from contract
+ * @param {StudentInterface} student - Basic student information from blockchain contract
  * @param {Student.ResultStructOutput[]} results - Array of raw result data from contract
  * @returns {Promise<StudentInterface>} Complete student object with formatted results
  * @throws {Error} If a university cannot be found for a result
  */
-export async function generateStudent(student: Student.StudentBasicInfoStructOutput, results: Student.ResultStructOutput[]): Promise<StudentInterface> {
+export async function generateStudent(student: StudentInterface, results: Student.ResultStructOutput[]): Promise<StudentInterface> {
     try {
         // Get universities information for all results
         const universities = await getUniversities(new Set(results.map(r => r.university)));
@@ -266,11 +266,7 @@ export async function generateStudent(student: Student.StudentBasicInfoStructOut
 
         // Return complete student object
         return {
-            name: student.name,
-            surname: student.surname,
-            birthDate: computeDate(student.birthDate),
-            birthPlace: student.birthPlace,
-            country: student.country,
+            ...student,
             results: resultsDef,
         };
     } catch (error) {
