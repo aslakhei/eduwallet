@@ -8,6 +8,10 @@
   - [Scenarios](#scenarios)
     - [Scenario 1](#scenario-1)
     - [Scenario 2](#scenario-2)
+  - [Requirements](#requirements)
+    - [Functional Requirements](#functional-requirements)
+    - [Non-Functional Requirements](#non-functional-requirements)
+    - [Constraints and assumptions](#constraints-and-assumptions)
   - [GUI prototype](#gui-prototype)
 
 ## Purpose
@@ -75,6 +79,47 @@ The project aims to revolutionize university credit management by storing studen
 - The employer has verified and certified access to the candidate's academic records through EduWallet.
 - The candidate academic data are certified, secure and immutable without authorization.
 - The permission granted to the employer expires.
+
+## Requirements
+
+### Functional Requirements
+
+**System administration**:
+
+- **FR1**: Allow the system administrator to verify and approve universities requesting access to the system.
+
+**University**:
+
+- **FR2**: Enable universities to register and subscribe to the system.
+- **FR3**: Provide secure authentication mechanisms for universities to access the platform.
+- **FR4**: Allow universities to create new smart contract wallets for students upon enrolment.
+- **FR5**: Enable universities to read from and issue academic records to students' smart wallets.
+- **FR6**: Implement authorization controls to ensure that only permitted universities can access or modify specific academic records.
+- **FR7**: Provide a mechanism for universities to request and obtain permission from students before accessing or modifying their academic records.
+- **FR8**: Provide APIs that allow universities to integrate the system with their existing LMS.
+
+**Student**:
+
+- **FR9**: Students must own and manage their academic smart wallets independently.
+- **FR10**: Enable students to securely authenticate and access their smart wallets.
+- **FR11**: Provide students with a web-based interface to view and manage their academic records.
+- **FR12**: Allow students to grant and revoke access permissions to their academic records for specific institutions.
+
+### Non-Functional Requirements
+
+- **NFR1**: The system shall operate without dependency on third-party wallet providers such as MetaMask.
+- **NFR2**: The system shall minimize reliance on third-party technologies to enhance security and maintain control.
+- **NFR3**: On-chain storage costs shall be minimized by storing only essential data, excluding large files.
+- **NFR4**: Academic records shall be tamper-proof and verifiable by authorized third parties.
+- **NFR5**: The system shall provide an intuitive and user-friendly interface for both students and university administrators.
+- **NFR6**: The system architecture shall be designed to maximize decentralization wherever feasible.
+
+### Constraints and assumptions
+
+- User authentication is not the primary focus; a basic, easily replaceable mechanism is sufficient.
+- The authentication method should allow for future upgrades.
+- All on-chain operations must stay within acceptable gas limits.
+- Universities are assumed to have a basic understanding of blockchain concepts.
 
 ## GUI prototype
 
