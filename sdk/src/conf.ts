@@ -137,7 +137,7 @@ export const roleCodes: RoleCodes = {
  * Set to false in production to minimize console output.
  * Can be configured via the DEBUG environment variable.
  */
-export const DEBUG = process.env.DEBUG || false;
+export const DEBUG = process.env.DEBUG || true;
 
 /**
  * Conditionally logs errors to the console based on the DEBUG flag.
