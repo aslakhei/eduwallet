@@ -7,7 +7,6 @@ import "@account-abstraction/contracts/core/BaseAccount.sol";
 import "@account-abstraction/contracts/core/Helpers.sol";
 import "hardhat/console.sol";
 
-
 // Custom errors for better clarity
 error UnauthorizedCall();
 /// @param errorData Data returned by the failed call, containing error details
@@ -19,10 +18,10 @@ error ViewCallFailed(bytes errorData);
  * @notice ERC-4337 compatible smart contract wallet enabling gas-less transactions
  * @dev Implements BaseAccount for ERC-4337 support with signature-based authorization
  */
-contract SmartAccount is BaseAccount {
+abstract contract SmartAccount is BaseAccount {
     // The EOA owner address that controls this smart account
     address private immutable owner;
-    
+
     // The EntryPoint contract that processes user operations
     IEntryPoint private immutable _entryPoint;
 
