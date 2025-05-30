@@ -10,7 +10,7 @@ export interface StudentEthWalletInfo {
     readonly id: string;
     /** Authentication password. */
     readonly password: string;
-    /** Ethereum wallet instance for blockchain transactions. */
+    /** Ethereum wallet (EOA) instance for blockchain transactions. */
     readonly ethWallet: Wallet;
 }
 
@@ -19,7 +19,7 @@ export interface StudentEthWalletInfo {
  * Contains the credentials required for login and blockchain operations.
  */
 export interface StudentCredentials extends Omit<StudentEthWalletInfo, "ethWallet"> {
-    /** Ethereum address associated with the student's academic wallet. */
+    /** Ethereum address associated with the student's smart account. */
     readonly academicWalletAddress: string;
 }
 
@@ -54,7 +54,7 @@ export interface Student extends StudentData {
  * Used as the base for course-related interfaces.
  */
 interface CourseId {
-    /** Unique course code/identifier within the university system. */
+    /** Unique course identifier within the university system. */
     readonly code: string;
 }
 
@@ -108,7 +108,6 @@ export interface University {
 
 /**
  * Represents permission types that can be granted to universities.
- * @author Diego Da Giau
  */
 export enum PermissionType {
     Read,
