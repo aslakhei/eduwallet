@@ -17,7 +17,7 @@ Each project folder contains a README that describes the corresponding component
 
 ### browser-extension
 
-Contains a React-based web application that serves as the student interface for the EduWallet system. It's structured as a modern single-page application that provides students access to their academic records wallet.
+Contains a React-based web application that serves as the student interface for the EduWallet system. It's structured as a modern Chrome extension application that provides students access to their academic records wallet.
 
 ### cli
 
