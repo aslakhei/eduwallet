@@ -1,4 +1,3 @@
-import { ContractTransactionResponse } from "ethers";
 import type { Credentials } from "./models/student";
 import { StudentModel } from "./models/student";
 import type UniversityModel from "./models/university";
@@ -31,7 +30,7 @@ export async function logIn(credentials: Credentials): Promise<StudentModel> {
         // Get student's smart contract address
         const contractAddress = await studentsRegister
             .connect(studentWallet)
-            .getStudentWallet(studentWallet.address);
+            .getStudentAccount();
         
         if (!contractAddress) {
             throw new Error('Student contract address not found');
@@ -69,26 +68,12 @@ export async function getUniversities(student: StudentModel, universitiesAddress
             return [];
         }
 
-        // Get contract instance and university addresses
-        const studentsRegister = getStudentsRegister();
-
-        // Get wallet addresses for all universities
-        const universitiesWallets = await studentsRegister
-            .connect(student.wallet)
-            .getUniversitiesWallets(universitiesAddresses);
-            
-        if (!universitiesWallets || universitiesWallets.length !== universitiesAddresses.length) {
-            throw new Error('Failed to retrieve university wallet addresses');
-        }
-
         // Create university models with full information
         const universities: UniversityModel[] = [];
-        for (let i = 0; i < universitiesWallets.length; ++i) {
+        for (let i = 0; i < universitiesAddresses.length; ++i) {
             try {
                 const university = await getUniversity(
-                    student,
-                    universitiesAddresses[i],
-                    universitiesWallets[i]
+                    universitiesAddresses[i]
                 );
                 universities.push(university);
             } catch (universityError) {
@@ -130,10 +115,10 @@ export async function getPermissions(student: StudentModel): Promise<Permission[
  * @author Diego Da Giau
  * @param {StudentModel} student - The authenticated student model
  * @param {Permission} permission - The permission to process
- * @returns {Promise<ContractTransactionResponse>} Transaction response from the blockchain
+ * @returns {Promise<void>}
  * @throws {Error} If permission action cannot be performed
  */
-export async function performAction(student: StudentModel, permission: Permission): Promise<ContractTransactionResponse> {
+export async function performAction(student: StudentModel, permission: Permission): Promise<void> {
     try {
         if (!student || !student.wallet) {
             throw new Error('Student not properly authenticated');

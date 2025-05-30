@@ -6,13 +6,12 @@ import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {Student} from "./Student.sol";
 import {StudentDeployer} from "./StudentDeployer.sol";
 import {UniversityDeployer} from "./UniversityDeployer.sol";
+import {IEntryPoint} from "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
 
 // Custom errors for better clarity
 error AlreadyExistingUniversity();
-error UniversityNotAccessible();
 error UniversityNotPresent();
 error AlreadyExistingStudent();
-error StudentNotAccessible();
 error StudentNotPresent();
 
 /**
@@ -27,79 +26,82 @@ error StudentNotPresent();
 contract StudentsRegister is AccessControl {
     StudentDeployer private studentDeployer;
     UniversityDeployer private universityDeployer;
+    IEntryPoint private entryPoint;
 
     // Role definitions for access control
     bytes32 private constant UNIVERSITY_ROLE = keccak256("UNIVERSITY_ROLE");
     bytes32 private constant STUDENT_ROLE = keccak256("STUDENT_ROLE");
 
     // State variables
-    mapping(address university => address universityWallet)
-        private universityWallets;
-    mapping(address student => address studentWallet) private studentWallets;
+    mapping(address university => address universityAccount)
+        private universityAccounts;
+    mapping(address student => address studentAccount) private studentAccounts;
 
-    constructor(address _studentDeployer, address _universityDeployer) {
+    /**
+     * @notice Initializes the StudentsRegister contract with required deployers and entry point
+     * @dev Sets up contract dependencies and assigns admin role to the deployer
+     * @param _studentDeployer Address of the StudentDeployer contract
+     * @param _universityDeployer Address of the UniversityDeployer contract
+     * @param _entryPoint Address of the EntryPoint contract for account abstraction
+     */
+    constructor(
+        address _studentDeployer,
+        address _universityDeployer,
+        address _entryPoint
+    ) {
         studentDeployer = StudentDeployer(_studentDeployer);
         universityDeployer = UniversityDeployer(_universityDeployer);
+        entryPoint = IEntryPoint(_entryPoint);
+        // Grant admin role to the contract deployer
         _grantRole(DEFAULT_ADMIN_ROLE, _msgSender());
     }
 
     /**
      * @notice Registers a new university in the system
+     * @dev Only callable by addresses with DEFAULT_ADMIN_ROLE
+     * @param _address Address of the university to register
      * @param _name University's full name
-     * @param _country University's country code (ISO 3166-1 alpha-2)
-     * @param _shortName University's abbreviation
+     * @param _country University's country location
+     * @param _shortName University's abbreviation or short identifier
+     * @custom:throws AlreadyExistingUniversity if university is already registered
      */
     function subscribe(
+        address _address,
         string calldata _name,
         string calldata _country,
         string calldata _shortName
-    ) external returns (address) {
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
         require(
-            !hasRole(UNIVERSITY_ROLE, _msgSender()),
+            !hasRole(UNIVERSITY_ROLE, _address),
             AlreadyExistingUniversity()
         );
 
-        address addr = universityDeployer.createUniversity(
+        // Deploy university account contract
+        address addr = universityDeployer.deploy(
+            _address,
             _name,
             _country,
-            _shortName
+            _shortName,
+            entryPoint
         );
-        universityWallets[_msgSender()] = addr;
-        _grantRole(UNIVERSITY_ROLE, _msgSender());
-        return addr;
+
+        // Map university address to deployed account and grant role
+        universityAccounts[_address] = addr;
+        _grantRole(UNIVERSITY_ROLE, addr);
     }
 
     /**
-     * @notice Retrieves multiple university wallet addresses in a single call
-     * @dev Only accessible by registered universities and students
-     * @param _universities Array of university addresses to query
-     * @return addresses Array of corresponding wallet addresses
-     * @custom:throws UniversityNotAccessible if caller is not authorized
-     * @custom:throws UniversityNotPresent if address not correspond to any universities
+     * @notice Retrieves the university account address for the calling university
+     * @dev Returns the deployed account contract address for the message sender
+     * @return Address of the university's account contract
+     * @custom:throws UniversityNotPresent if university is not registered
      */
-    function getUniversitiesWallets(
-        address[] calldata _universities
-    ) external view returns (address[] memory addresses) {
-        // Access control
-        if (
-            !hasRole(UNIVERSITY_ROLE, _msgSender()) &&
-            !hasRole(STUDENT_ROLE, _msgSender())
-        ) {
-            revert UniversityNotAccessible();
+    function getUniversityAccount() external view returns (address) {
+        address account = universityAccounts[_msgSender()];
+        if (account != address(0)) {
+            return account;
         }
-
-        // Initialize return array in memory
-        addresses = new address[](_universities.length);
-
-        // Fetch all wallet addresses
-        for (uint i = 0; i < _universities.length; i++) {
-            address wallet = universityWallets[_universities[i]];
-            if (wallet == address(0)) {
-                revert UniversityNotPresent();
-            }
-            addresses[i] = wallet;
-        }
-        return addresses;
+        revert UniversityNotPresent();
     }
 
     /**
@@ -116,36 +118,29 @@ contract StudentsRegister is AccessControl {
         // Check if student is not already registered
         require(!hasRole(STUDENT_ROLE, _student), AlreadyExistingStudent());
 
-        address studentAddr = studentDeployer.createStudent(
+        // Deploy student account contract with university as initial writer
+        address studentAddr = studentDeployer.deploy(
             _msgSender(),
             _student,
-            _basicInfo
+            _basicInfo,
+            entryPoint
         );
 
         // Store student's contract address and grant student role
-        studentWallets[_student] = studentAddr;
+        studentAccounts[_student] = studentAddr;
         _grantRole(STUDENT_ROLE, _student);
     }
 
     /**
-     * @notice Retrieves the wallet address for a specific student
-     * @dev Only callable by universities or the student themselves
-     * @param student Address of the student whose wallet is being queried
-     * @return address The address of the student's Smart Contract
-     * @custom:throws StudentNotAccessible if caller is not authorized
+     * @notice Retrieves the student account address for the calling student
+     * @dev Returns the deployed account contract address for the message sender
+     * @return Address of the student's account contract
      * @custom:throws StudentNotPresent if student is not registered
      */
-    function getStudentWallet(address student) external view returns (address) {
-        // Check if caller is authorized
-        require(
-            hasRole(UNIVERSITY_ROLE, _msgSender()) || _msgSender() == student,
-            StudentNotAccessible()
-        );
-
-        // Get and verify student wallet exists
-        address studentWallet = studentWallets[student];
-        if (studentWallet != address(0)) {
-            return studentWallet;
+    function getStudentAccount() external view returns (address) {
+        address account = studentAccounts[_msgSender()];
+        if (account != address(0)) {
+            return account;
         }
         revert StudentNotPresent();
     }

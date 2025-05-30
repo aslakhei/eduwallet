@@ -2,6 +2,9 @@
 
 pragma solidity >=0.8.2;
 
+import {SmartAccount} from "./SmartAccount.sol";
+import {IEntryPoint} from "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
+
 /**
  * @title University Smart Contract
  * @author Diego Da Giau
@@ -11,7 +14,7 @@ pragma solidity >=0.8.2;
  * TODO: Add input validation. Add events if necessary.
  * ? Is it better to save data as immutable and then return the struct when getUniversity info is called?
  */
-contract University {
+contract University is SmartAccount {
     /**
      * @dev Structure containing basic university information
      * @param name Full name of the university
@@ -35,10 +38,12 @@ contract University {
      * @param _shortName Abbreviated name or acronym of the university
      */
     constructor(
+        address _address,
         string memory _name,
         string memory _country,
-        string memory _shortName
-    ) {
+        string memory _shortName,
+        IEntryPoint _entryPoint
+    ) SmartAccount(_entryPoint, _address) {
         universityInfo.name = _name;
         universityInfo.country = _country;
         universityInfo.shortName = _shortName;

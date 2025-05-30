@@ -6,10 +6,14 @@ import { Credentials, StudentModel } from "../models/student"
 import type { StudentsRegister } from '../../../typechain-types/contracts/StudentsRegister';
 import UniversityModel from '../models/university';
 import { University__factory } from "../../../typechain-types/factories/contracts/University__factory"
-import { blockchainConfig, roleCodes, logError } from './conf';
+import { blockchainConfig, roleCodes, logError, DEBUG } from './conf';
 import type { Student } from '../../../typechain-types/contracts/Student';
-import type { ContractTransactionResponse } from 'ethers';
 import { Permission, PermissionType } from '../models/permissions';
+import { BaseContract } from 'ethers';
+import { Result } from 'ethers';
+import type { EntryPoint } from '../../../typechain-types/@account-abstraction/contracts/core/EntryPoint';
+import { EntryPoint__factory } from '../../../typechain-types/factories/@account-abstraction/contracts/core/EntryPoint__factory';
+import { AccountAbstraction } from './AccountAbstraction';
 
 // Initialize provider once for reuse
 const provider = new JsonRpcProvider(blockchainConfig.url);
@@ -38,10 +42,10 @@ export function getStudentsRegister(): StudentsRegister {
  */
 export function getStudentContract(student: StudentModel): Student {
     try {
-        if (!student.contractAddress) {
+        if (!student.accountAddress) {
             throw new Error('Student contract address is missing');
         }
-        return Student__factory.connect(student.contractAddress, provider);
+        return Student__factory.connect(student.accountAddress, provider);
     } catch (error) {
         logError('Failed to connect to Student contract:', error);
         throw new Error('Could not establish connection to Student contract');
@@ -80,14 +84,11 @@ export async function getStudent(student: StudentModel): Promise<void> {
             throw new Error('Student wallet not initialized');
         }
 
-        // Connect to student's contract
-        const contract = getStudentContract(student);
+        // Fetch student's information
+        const studentContract = getStudentContract(student);
+        const [studentTmp] = await executeSmartAccountViewCall(student, studentContract, student.accountAddress, 'getStudentInfo', []);
 
-        // Fetch student info
-        const {
-            basicInfo,
-            results
-        } = await contract.connect(student.wallet).getStudentInfo();
+        const { basicInfo, results } = studentTmp;
 
         // Update student model
         student.name = basicInfo.name;
@@ -104,41 +105,28 @@ export async function getStudent(student: StudentModel): Promise<void> {
     }
 }
 
-/**
- * Fetches university information from the blockchain and creates a UniversityModel instance.
- * @param {StudentModel} student - The authenticated student making the request
- * @param {string} universityAddress - The university's blockchain address
- * @param {string} universityWallet - The university's wallet contract address
- * @returns {Promise<UniversityModel>} A promise that resolves to the university model
- * @throws {Error} If university data cannot be retrieved or connection fails
- */
-export async function getUniversity(student: StudentModel, universityAddress: string, universityWallet: string): Promise<UniversityModel> {
+export async function getUniversity(universityAccountAddress: string): Promise<UniversityModel> {
     try {
-        if (!student.wallet) {
-            throw new Error('Student wallet not initialized');
-        }
-
-        if (!universityAddress || !universityWallet) {
-            throw new Error('University address or wallet address is missing');
+        if (!universityAccountAddress) {
+            throw new Error('University address is missing');
         }
 
         // Connect to university's smart contract using its wallet address
-        const contract = University__factory.connect(universityWallet, provider);
+        const contract = University__factory.connect(universityAccountAddress, provider);
 
-        // Fetch university information using student's credentials
+        // Fetch university information
         const {
             name,
             country,
             shortName
-        } = await contract.connect(student.wallet).getUniversityInfo();
+        } = await contract.getUniversityInfo();
 
         // Create and return new university model with fetched data
         return new UniversityModel(
             name,
             country,
             shortName,
-            universityAddress,
-            universityWallet
+            universityAccountAddress
         );
     } catch (error) {
         logError('Failed to fetch university data:', error);
@@ -159,7 +147,7 @@ export async function getRawPermissions(student: StudentModel): Promise<Permissi
             throw new Error('Student wallet not initialized');
         }
 
-        if (!student.contractAddress) {
+        if (!student.accountAddress) {
             throw new Error('Student contract address is missing');
         }
 
@@ -173,10 +161,14 @@ export async function getRawPermissions(student: StudentModel): Promise<Permissi
             reads,
             writes
         ] = await Promise.all([
-            studentContract.getPermissions(roleCodes.readRequest),
-            studentContract.getPermissions(roleCodes.writeRequest),
-            studentContract.getPermissions(roleCodes.read),
-            studentContract.getPermissions(roleCodes.write)
+            executeSmartAccountViewCall(student, studentContract, student.accountAddress, 'getPermissions', [roleCodes.readRequest])
+                .then(result => result[0] as string[]),
+            executeSmartAccountViewCall(student, studentContract, student.accountAddress, 'getPermissions', [roleCodes.writeRequest])
+                .then(result => result[0] as string[]),
+            executeSmartAccountViewCall(student, studentContract, student.accountAddress, 'getPermissions', [roleCodes.read])
+                .then(result => result[0] as string[]),
+            executeSmartAccountViewCall(student, studentContract, student.accountAddress, 'getPermissions', [roleCodes.write])
+                .then(result => result[0] as string[]),
         ]);
 
         // Map string arrays to Permission objects arrays
@@ -216,10 +208,10 @@ export async function getRawPermissions(student: StudentModel): Promise<Permissi
  * @author Diego Da Giau
  * @param {StudentModel} student - The authenticated student model
  * @param {string} universityAddress - The address of the university to revoke
- * @returns {Promise<ContractTransactionResponse>} Transaction response from the blockchain
+ * @returns {Promise<void>}
  * @throws {Error} If transaction fails or student wallet is not initialized
  */
-export async function revokePermission(student: StudentModel, universityAddress: string): Promise<ContractTransactionResponse> {
+export async function revokePermission(student: StudentModel, universityAddress: string): Promise<void> {
     try {
         if (!student.wallet) {
             throw new Error('Student wallet not initialized');
@@ -230,7 +222,7 @@ export async function revokePermission(student: StudentModel, universityAddress:
         }
 
         const contract = getStudentContract(student).connect(student.wallet);
-        return await contract.revokePermission(universityAddress);
+        return await sendTransaction(student, contract, student.accountAddress, 'revokePermission', [universityAddress]);
     } catch (error) {
         logError('Failed to revoke permission:', error);
         throw new Error('Could not revoke university permission');
@@ -242,10 +234,10 @@ export async function revokePermission(student: StudentModel, universityAddress:
  * @author Diego Da Giau
  * @param {StudentModel} student - The authenticated student model
  * @param {Permission} permission - The permission to grant, including university and type
- * @returns {Promise<ContractTransactionResponse>} Transaction response from the blockchain
+ * @returns {Promise<void>}
  * @throws {Error} If transaction fails, permission type is invalid, or student wallet is not initialized
  */
-export async function grantPermission(student: StudentModel, permission: Permission): Promise<ContractTransactionResponse> {
+export async function grantPermission(student: StudentModel, permission: Permission): Promise<void> {
     try {
         if (!student.wallet) {
             throw new Error('Student wallet not initialized');
@@ -270,9 +262,106 @@ export async function grantPermission(student: StudentModel, permission: Permiss
                 throw new Error("Invalid permission type specified");
         }
 
-        return await contract.grantPermission(permissionType, permission.university);
+        return await sendTransaction(student, contract, student.accountAddress, 'grantPermission', [permissionType, permission.university]);
     } catch (error) {
         logError('Failed to grant permission:', error);
         throw new Error('Could not grant university permission');
+    }
+}
+
+/**
+ * Executes a view function call through a student's smart account contract.
+ * This allows students to read data from contracts through their account abstraction wallet.
+ * @author Diego Da Giau
+ * @param {StudentModel} student - The authenticated student model with wallet
+ * @param {BaseContract} targetContract - The contract interface to call
+ * @param {string} targetContractAddress - The address of the contract to interact with
+ * @param {string} functionName - The name of the view function to call
+ * @param {any[]} params - Array of parameters to pass to the function
+ * @returns {Promise<Result>} Decoded result from the view function call
+ * @throws {Error} If view call fails or cannot be executed through the smart account
+ */
+export async function executeSmartAccountViewCall(student: StudentModel, targetContract: BaseContract, targetContractAddress: string, functionName: string, params: any[]): Promise<Result> {
+    try {
+        const smartAccount = getStudentContract(student);
+
+        // Encode the function call
+        const calldata = targetContract.interface.encodeFunctionData(functionName, params);
+
+        // Execute the view call through the smart account
+        const results = await smartAccount.connect(student.wallet).executeViewCall(targetContractAddress, calldata);
+
+        // Decode the result
+        const decodedResults = targetContract.interface.decodeFunctionResult(functionName, results);
+
+        if (DEBUG) {
+            console.log("DEC RES = ", decodedResults);
+        }
+
+        return decodedResults;
+    } catch (error) {
+        logError('Smart account view call failed:', error);
+        throw new Error(`Failed to execute view call to ${functionName}`);
+    }
+}
+
+/**
+ * Retrieves the EntryPoint contract instance.
+ * The EntryPoint is the central contract in ERC-4337 that manages account abstraction.
+ * @author Diego Da Giau
+ * @returns {EntryPoint} Connected EntryPoint contract instance
+ * @throws {Error} If connection to the contract fails
+ */
+export function getEntryPoint(): EntryPoint {
+    try {
+        return EntryPoint__factory.connect(blockchainConfig.entryPointAddress, provider);
+    } catch (error) {
+        logError('Failed to get EntryPoint contract:', error);
+        throw new Error('Failed to connect to EntryPoint contract: ' + (error instanceof Error ? error.message : String(error)));
+    }
+}
+
+/**
+ * Sends a transaction to the blockchain through account abstraction.
+ * Creates and executes a UserOperation without requiring the student to pay gas fees directly.
+ * @author Diego Da Giau
+ * @param {StudentModel} student - The authenticated student model with wallet and account address
+ * @param {BaseContract} targetContract - The contract interface to call
+ * @param {string} targetContractAddress - The address of the contract to interact with
+ * @param {string} functionName - The name of the function to call
+ * @param {any[]} params - Array of parameters to pass to the function
+ * @returns {Promise<void>} Promise that resolves when the transaction is confirmed
+ * @throws {Error} If transaction creation or execution fails
+ */
+export async function sendTransaction(student: StudentModel, targetContract: BaseContract, targetContractAddress: string, functionName: string, params: any[]): Promise<void> {
+    try {
+        // Initialize account abstraction manager
+        const accountAbstraction = new AccountAbstraction(
+            provider,
+            student.wallet
+        );
+
+        // Create contract interface for target contract
+        const targetContractInterface = targetContract.interface;
+
+        const callData = targetContractInterface.encodeFunctionData(functionName, params);
+
+        // Create user operation
+        const userOp = await accountAbstraction.createUserOp({
+            sender: student.accountAddress,
+            target: targetContractAddress,
+            value: 0n,
+            data: callData,
+        });
+
+        // Execute the operation
+        const tx = await accountAbstraction.executeUserOps([userOp], student.wallet.address);
+        const receipt = await tx.wait();
+        if (receipt) {
+            accountAbstraction.verifyTransaction(receipt, targetContract);
+        }
+    } catch (error) {
+        logError(`Failed to execute transaction ${functionName}:`, error);
+        throw new Error(error instanceof Error ? error.message : String(error));
     }
 }

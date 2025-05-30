@@ -89,7 +89,7 @@ function PermissionsByCategory(props: PermissionsByCategoryProps): JSX.Element {
                     {title}
                 </Col>
             </Row>
-            {permissions.length > 0 ? permissions.map(p => <Permission key={p.university} permission={p} handleClick={handleClick} university={universities.find(u => u.universityAddress === p.university)} />) : <EmptyCategory />}
+            {permissions.length > 0 ? permissions.map(p => <Permission key={p.university} permission={p} handleClick={handleClick} university={universities.find(u => u.accountAddress === p.university)} />) : <EmptyCategory />}
         </>
     );
 }

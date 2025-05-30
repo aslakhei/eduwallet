@@ -13,10 +13,18 @@ dotenv.config();
  * Defines parameters needed to connect to Ethereum networks.
  */
 interface BlockchainNetworkConfig {
+    /** Chain identifier for the Ethereum network. */
+    readonly chainId: string,
     /** JSON-RPC endpoint URL for the Ethereum network. */
     readonly url: string;
     /** Smart contract address for the StudentsRegister contract. */
     readonly registerAddress: string;
+    /** Smart contract address for the EntryPoint contract used in the account abstraction protocol. */
+    readonly entryPointAddress: string;
+    /** Smart contract address for the Paymaster contract that sponsors transaction gas fees. */
+    readonly paymasterAddress: string,
+    /** Smart contract address for the StudentWallet factory that deploys new student wallets. */
+    readonly studentFactoryAddress: string,
 }
 
 /**
@@ -52,10 +60,18 @@ interface RoleCodes {
  * Uses environment variables when available, falls back to development defaults.
  */
 export const blockchainConfig: BlockchainNetworkConfig = {
+    /** Chain identifier - configure via CHAIN_ID env var. */
+    chainId: process.env.CHAIN_ID || "31337",
     /** Network endpoint - configure via NETWORK_URL env var. */
     url: process.env.NETWORK_URL || "http://127.0.0.1:8545",
     /** StudentsRegister contract address - configure via REGISTER_ADDRESS env var. */
-    registerAddress: process.env.REGISTER_ADDRESS || "0xDe09E74d4888Bc4e65F589e8c13Bce9F71DdF4c7",
+    registerAddress: process.env.REGISTER_ADDRESS || "0x51a240271AB8AB9f9a21C82d9a85396b704E164d",
+    /** EntryPoint contract address - configure via ENTRYPOINT_ADDRESS env var. */
+    entryPointAddress: process.env.ENTRYPOINT_ADDRESS || "0xF2E246BB76DF876Cef8b38ae84130F4F55De395b",
+    /** Paymaster contract address - configure via PAYMASTER_ADDRESS env var. */
+    paymasterAddress: process.env.PAYMASTER_ADDRESS || "0xB9816fC57977D5A786E654c7CF76767be63b966e",
+    /** StudentFactory contract address - configure via STUDENT_FACTORY_ADDRESS env var. */
+    studentFactoryAddress: process.env.STUDENT_FACTORY_ADDRESS || "0x2946259e0334f33a064106302415ad3391bed384",
 }
 
 /**
@@ -82,7 +98,7 @@ export const ipfsConfig: IpfsStorageConfig = {
         endpoint: process.env.S3_ENDPOINT || "https://s3.filebase.com",
         /** AWS region - configure via S3_REGION env var. */
         region: process.env.S3_REGION || "us-east-1",
-        /** Use path-style addressing. */
+        /** Use path-style addressing instead of virtual-hosted style. */
         forcePathStyle: true
     }
 }
@@ -90,18 +106,20 @@ export const ipfsConfig: IpfsStorageConfig = {
 /**
  * Ethereum JSON-RPC provider instance.
  * Pre-configured with the URL from blockchain configuration.
+ * Used to interact with the Ethereum blockchain network.
  */
 export const provider = new JsonRpcProvider(blockchainConfig.url);
 
 /**
  * S3 client for IPFS storage.
  * Pre-configured with the settings from IPFS configuration.
+ * Used to store and retrieve certificate data on IPFS via S3 interface.
  */
 export const s3Client = new S3Client(ipfsConfig.s3Config);
 
 /**
  * Role identifiers used for access control.
- * Uses Ethereum's id() function to generate role identifiers from string constants.
+ * Uses Ethereum's id() function to generate deterministic role identifiers from human-readable string constants.
  */
 export const roleCodes: RoleCodes = {
     /** Role identifier for read access requesters */
@@ -117,13 +135,15 @@ export const roleCodes: RoleCodes = {
 /**
  * Debug mode flag. When true, logs errors to the console.
  * Set to false in production to minimize console output.
+ * Can be configured via the DEBUG environment variable.
  */
 export const DEBUG = process.env.DEBUG || false;
 
 /**
  * Conditionally logs errors to the console based on the DEBUG flag.
- * @param message - The error message
- * @param error - The actual error object
+ * Provides consistent error logging throughout the application.
+ * @param message - The error message to display
+ * @param error - The actual error object containing details
  */
 export function logError(message: string, error: any): void {
     if (DEBUG) {

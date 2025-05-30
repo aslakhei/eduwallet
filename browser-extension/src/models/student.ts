@@ -10,7 +10,7 @@ export class StudentModel {
     // Immutable properties
     public readonly id: string;
     public readonly wallet: Wallet;
-    public readonly contractAddress: string;
+    public readonly accountAddress: string;
 
     // Mutable properties
     public name: string = '';
@@ -24,12 +24,12 @@ export class StudentModel {
      * Creates a new StudentModel instance.
      * @param id - The student's ID
      * @param wallet - The student's Ethereum wallet
-     * @param contractAddress - The student's smart contract address
+     * @param accountAddress - The student's smart contract address
      */
-    constructor(id: string, wallet: Wallet, contractAddress: string) {
+    constructor(id: string, wallet: Wallet, accountAddress: string) {
         this.id = id;
         this.wallet = wallet;
-        this.contractAddress = contractAddress;
+        this.accountAddress = accountAddress;
     }
 
     /**
@@ -111,7 +111,7 @@ export class StudentModel {
     toObject(): Object {
         return {
             id: this.id,
-            walletAddress: this.contractAddress,
+            walletAddress: this.accountAddress,
             name: this.name,
             surname: this.surname,
             birthDate: this.birthDate,

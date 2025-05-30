@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "The project aims to revolutionize university credit management by storing students' academic information on the blockchain. Through EduWallet APIs, universities can easily synchronize grades and credits, simplifying the transfer of academic records between institutions. EduWallet ensures secure, efficient record-keeping and easy credit transferability across institutions.",
   "scripts": {
-    "cli": "cd cli && node dist/index.js",
+    "cli": "cd cli && npx hardhat run dist/index.js --network localhost",
     "build-cli": "cd cli && npm run build",
     "build-sdk": "cd sdk && npm run build && cd .. && npm run build-cli"
   },
@@ -20,11 +20,13 @@
   "homepage": "https://github.com/NTNU-IDI/eduwallet-eduwalletdiego#readme",
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "@types/node": "^22.15.15",
     "hardhat": "^2.22.18",
     "ts-node": "^10.9.2",
     "typescript": "^5.7.3"
   },
   "dependencies": {
+    "@account-abstraction/contracts": "^0.8.0",
     "@openzeppelin/contracts": "^5.2.0",
     "ethers": "^6.13.5"
   }

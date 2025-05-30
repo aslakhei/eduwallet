@@ -3,11 +3,10 @@
 pragma solidity >=0.8.2;
 
 import {AccessControlEnumerable} from "@openzeppelin/contracts/access/extensions/AccessControlEnumerable.sol";
+import {SmartAccount} from "./SmartAccount.sol";
+import {IEntryPoint} from "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
 
 // Custom errors for better clarity
-error UnauthorizedReading();
-error UnauthorizedWriting();
-error NotExistingRecord();
 error WrongRole();
 error PermissionAlreadyGiven();
 
@@ -17,11 +16,9 @@ error PermissionAlreadyGiven();
  * @notice Manages a student's academic records and university permissions
  * @dev Implements role-based access control for universities to manage student records
  *
- * TODO: Add input validation. Add events if necessary. Change require with if statements, revert and custom errors. See library for the validation part.
- * ? Enroll and Evaluate with an array of struct as parameter?
- * ? Why students have a different function than universities to fetch information?
+ * TODO: Add input validation. Change require with if statements, revert and custom errors. See library for the validation part.
  */
-contract Student is AccessControlEnumerable {
+contract Student is SmartAccount, AccessControlEnumerable {
     // Role definitions for access control
     bytes32 private constant READER_ROLE = keccak256("READER_ROLE");
     bytes32 private constant WRITER_ROLE = keccak256("WRITER_ROLE");
@@ -29,6 +26,34 @@ contract Student is AccessControlEnumerable {
     // Role definition for access requests control
     bytes32 private constant READER_APPLICANT = keccak256("READER_APPLICANT");
     bytes32 private constant WRITER_APPLICANT = keccak256("WRITER_APPLICANT");
+
+    /**
+     * @dev Represents enrollment information for a course
+     * @param code Course code
+     * @param name Course name
+     * @param degreeCourse Name of the degree program
+     * @param ects ECTS credits for the course
+     */
+    struct EnrollmentInfo {
+        string code;
+        string name;
+        string degreeCourse;
+        uint16 ects;
+    }
+
+    /**
+     * @dev Represents evaluation information for a completed course
+     * @param code Course code to identify which course is being evaluated
+     * @param grade Final grade assigned to the student
+     * @param date Unix timestamp when the grade was assigned
+     * @param certificateHash CID of the IPFS file representing the certificate
+     */
+    struct EvaluationInfo {
+        string code;
+        string grade;
+        uint date;
+        string certificateHash;
+    }
 
     /**
      * @dev Represents an academic result/course enrollment
@@ -87,16 +112,18 @@ contract Student is AccessControlEnumerable {
      * @param _university Initial university address to receive WRITER_ROLE
      * @param _student Student's address to receive DEFAULT_ADMIN_ROLE
      * @param _basicInfo Struct containing core biographical student's info
+     * @param _entryPoint EntryPoint contract address used by the account abstraction layer
      */
     constructor(
         address _university,
         address _student,
-        StudentBasicInfo memory _basicInfo
-    ) {
+        StudentBasicInfo memory _basicInfo,
+        IEntryPoint _entryPoint
+    ) SmartAccount(_entryPoint, _student) {
         studentInfo.basicInfo = _basicInfo;
 
         // Set the student as admin of the wallet
-        _grantRole(DEFAULT_ADMIN_ROLE, _student);
+        _grantRole(DEFAULT_ADMIN_ROLE, address(this));
         // Give to the university the permissions to write
         _grantRole(WRITER_ROLE, _university);
     }
@@ -145,61 +172,55 @@ contract Student is AccessControlEnumerable {
     }
 
     /**
-     * @notice Registers a new course enrollment
-     * @dev Only callable by universities with WRITER_ROLE
-     * @param _code Course unique identifier
-     * @param _name Course full name
-     * @param _degreeCourse Degree program name
-     * @param _ects Course ECTS credits number (original value multiplied by 100 to work with integer numbers)
+     * @notice Enrolls a student in one or more courses
+     * @dev Only callable by universities with WRITER_ROLE. Creates new Result records with empty grade fields.
+     * @param _enrollments Array of enrollment information for each course
      */
     function enroll(
-        string calldata _code,
-        string calldata _name,
-        string calldata _degreeCourse,
-        uint16 _ects
+        EnrollmentInfo[] calldata _enrollments
     ) external onlyRole(WRITER_ROLE) {
-        Result memory r = Result(
-            _code,
-            _name,
-            _msgSender(),
-            _degreeCourse,
-            _ects,
-            "",
-            0,
-            ""
-        );
-        studentInfo.results.push(r);
+        for (uint i = 0; i < _enrollments.length; ++i) {
+            // Create a new Result record for each enrollment with empty evaluation fields
+            Result memory r = Result(
+                _enrollments[i].code,
+                _enrollments[i].name,
+                _msgSender(),
+                _enrollments[i].degreeCourse,
+                _enrollments[i].ects,
+                "", // Empty grade (not evaluated yet)
+                0, // No evaluation date
+                "" // No certificate hash
+            );
+            studentInfo.results.push(r);
+        }
     }
 
     /**
-     * @notice Records a grade for an enrolled course
-     * @dev Only the university that created the enrollment can grade it
-     * @param _code Course identifier to evaluate
-     * @param _grade Grade to assign
-     * @param _date Unix timestamp of evaluation
-     * @param _certificateHash CID of the certificate stored on IPFS
+     * @notice Updates course records with evaluation results (grades and certificates)
+     * @dev Only callable by universities with WRITER_ROLE. Updates existing Result records with evaluation data.
+     * @param _evaluations Array of evaluation information for completed courses
      */
     function evaluate(
-        string calldata _code,
-        string calldata _grade,
-        uint _date,
-        string calldata _certificateHash
+        EvaluationInfo[] calldata _evaluations
     ) external onlyRole(WRITER_ROLE) {
-        // Find the right course to evaluate
-        for (uint i; i < studentInfo.results.length; ++i) {
-            // Different universities may use the same code. Check also the university's name
-            if (
-                keccak256(bytes(studentInfo.results[i].code)) ==
-                keccak256(bytes(_code)) &&
-                studentInfo.results[i].university == _msgSender()
-            ) {
-                studentInfo.results[i].grade = _grade;
-                studentInfo.results[i].date = _date;
-                studentInfo.results[i].certificateHash = _certificateHash;
-                return;
+        for (uint i = 0; i < _evaluations.length; ++i) {
+            // Find the right course to evaluate by matching code and university
+            for (uint j; j < studentInfo.results.length; ++j) {
+                // Different universities may use the same course code, so check both code and university address
+                if (
+                    keccak256(bytes(studentInfo.results[j].code)) ==
+                    keccak256(bytes(_evaluations[j].code)) &&
+                    studentInfo.results[j].university == _msgSender()
+                ) {
+                    // Update the result record with evaluation data
+                    studentInfo.results[j].grade = _evaluations[i].grade;
+                    studentInfo.results[j].date = _evaluations[i].date;
+                    studentInfo.results[j].certificateHash = _evaluations[i]
+                        .certificateHash;
+                    return;
+                }
             }
         }
-        revert NotExistingRecord();
     }
 
     /**

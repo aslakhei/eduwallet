@@ -31,7 +31,7 @@ export default function CoursePage(): JSX.Element {
         ects: result.ects,
         // Map university address to name, fallback to 'Unknown' if not found
         university: universities.find(u =>
-            u.universityAddress === result.university
+            u.accountAddress === result.university
         )?.name || 'Unknown University',
         degreeCourse: result.degreeCourse,
         grade: result.grade,

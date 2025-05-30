@@ -1,23 +1,32 @@
-import { ethers, JsonRpcProvider, Wallet, NonceManager } from 'ethers';
-import * as crypto from 'crypto';
-import { StudentsRegister } from '@typechain/contracts';
+import { JsonRpcProvider, Wallet, NonceManager, parseEther } from 'ethers';
+import { randomBytes, pbkdf2Sync } from 'node:crypto';
+import type { Paymaster, StudentDeployer, StudentsRegister, UniversityDeployer } from '@typechain/contracts';
 import { StudentsRegister__factory } from "@typechain/factories/contracts/StudentsRegister__factory"
 import { StudentDeployer__factory } from '@typechain/factories/contracts/StudentDeployer__factory';
 import { UniversityDeployer__factory } from '@typechain/factories/contracts/UniversityDeployer__factory';
+import { EntryPoint__factory } from '@typechain/factories/@account-abstraction/contracts/core/EntryPoint__factory';
+import { Paymaster__factory } from '@typechain/factories/contracts/Paymaster__factory';
+import type { EntryPoint } from '@typechain/@account-abstraction/contracts/core/EntryPoint';
 import * as eduwallet from 'eduwallet-sdk';
 import * as dotenv from 'dotenv';
 
 
-// Load environment variables first before using them
+/**
+ * Load environment variables from .env file
+ */
 dotenv.config();
 const VERBOSE = process.env.VERBOSE || false;
 
 // Initialize provider with the RPC URL from environment or use localhost as fallback
 const PROVIDER = new JsonRpcProvider(process.env.RPC_URL || "http://localhost:8545");
 
+
+// Core contract references used throughout the application.
+// These get initialized during deployment process
 const deployer = getDeployer();
-let studentsRegister: StudentsRegister | undefined;
-export let uni: Wallet | undefined;
+let entryP: EntryPoint | undefined;        // EntryPoint contract for account abstraction
+let studentsRegister: StudentsRegister | undefined;  // Main registry contract 
+export let uni: Wallet | undefined;        // Active university wallet
 
 /**
  * Retrieves the deployer wallet using the private key from environment variables.
@@ -44,73 +53,176 @@ function getDeployer(): Wallet {
 }
 
 /**
- * Deploys the core Students Register contract and its dependencies to the blockchain.
- * First deploys the StudentDeployer and UniversityDeployer contracts in parallel,
- * then deploys the StudentsRegister contract with references to the deployers.
- * @author Diego Da Giau
+ * Deploys the complete contract infrastructure for the EduWallet system:
+ * 1. EntryPoint - Core account abstraction component
+ * 2. StudentDeployer & UniversityDeployer - Factory contracts for creating user accounts
+ * 3. StudentsRegister - Main registry that tracks all universities and students
+ * 4. Paymaster - Handles gas fee sponsorship for users
+ * All contracts are deployed in parallel where possible to optimize deployment time.
  * @returns {Promise<void>} Promise that resolves when all contracts are successfully deployed
- * @throws {Error} If any part of the deployment process fails, with the error message from the underlying error
+ * @throws {Error} If any deployment step fails
  */
 export async function deployStudentsRegister(): Promise<void> {
     try {
-        // Use NonceManager to handle concurrent transactions
+        // Create a managed deployer to handle transaction nonces
         const managedDeployer = new NonceManager(deployer);
 
-        // Deploy StudentDeployer contract using TypeChain factory
-        const studentDeployerFactory = new StudentDeployer__factory(managedDeployer);
-        const studentDeployer = await studentDeployerFactory.deploy();
+        // Deploy core contracts in parallel
+        const [entryPoint, studentDeployer, universityDeployer] = await deployInfrastructureContracts(managedDeployer);
 
-        // Deploy UniversityDeployer contract using TypeChain factory
-        const universityDeployerFactory = new UniversityDeployer__factory(managedDeployer);
-        const universityDeployer = await universityDeployerFactory.deploy();
+        // Store EntryPoint reference globally for later use
+        entryP = entryPoint;
 
-        // Create promises to wait for deployments and get addresses
-        const studentDeployerAddressPromise = async () => {
-            await studentDeployer.waitForDeployment();
-            return studentDeployer.getAddress();
-        };
-
-        const universityDeployerAddressPromise = async () => {
-            await universityDeployer.waitForDeployment();
-            return universityDeployer.getAddress();
-        };
-
-        // Wait for both deployers to be deployed in parallel
-        const [studentDeployerAddress, universityDeployerAddress] = await Promise.all([
-            studentDeployerAddressPromise(),
-            universityDeployerAddressPromise(),
-        ]);
-
-        // Deploy StudentsRegister contract using TypeChain factory
-        const studentsRegisterFactory = new StudentsRegister__factory(managedDeployer);
-        const register = await studentsRegisterFactory.deploy(
-            studentDeployerAddress,
-            universityDeployerAddress
+        // Deploy registry and paymaster contracts
+        const [register, paymaster] = await deployApplicationContracts(
+            managedDeployer,
+            entryPoint,
+            studentDeployer,
+            universityDeployer
         );
-        await register.waitForDeployment();
-        const address = await register.getAddress();
+
+        // Fund the paymaster with ETH to cover user operations
+        await fundPaymaster(entryPoint, paymaster);
 
         // Log deployment information if verbose mode is enabled
         if (VERBOSE) {
-            console.log(`\n---------------------------------------------------`);
-            console.log(`STUDENT DEPLOYER:`);
-            console.log(`Address: ${studentDeployerAddress}`);
-            console.log(`---------------------------------------------------`);
-            console.log(`---------------------------------------------------`);
-            console.log(`UNIVERSITY DEPLOYER:`);
-            console.log(`Address: ${universityDeployerAddress}`);
-            console.log(`---------------------------------------------------`);
-            console.log(`---------------------------------------------------`);
-            console.log(`STUDENT REGISTER:`);
-            console.log(`Address: ${address}`);
-            console.log(`---------------------------------------------------\n`);
+            logDeploymentAddresses(
+                await entryPoint.getAddress(),
+                await studentDeployer.getAddress(),
+                await universityDeployer.getAddress(),
+                await paymaster.getAddress(),
+                await register.getAddress()
+            );
         }
 
-        // Store the deployed register for future use
+        // Store reference to register for subsequent operations
         studentsRegister = register;
     } catch (error) {
-        throw new Error(`${error}`);
+        throw new Error(`Deployment failed: ${error}`);
     }
+}
+
+/**
+ * Deploys the core infrastructure contracts required by the EduWallet system:
+ * - EntryPoint: Core contract that processes user operations without requiring gas
+ * - StudentDeployer: Factory that creates deterministic student smart accounts
+ * - UniversityDeployer: Factory that creates university smart accounts
+ * @param deployer - NonceManager instance that handles transaction ordering
+ * @returns {Promise<[EntryPoint, StudentDeployer, UniversityDeployer]>} Triple of deployed contract instances
+ */
+async function deployInfrastructureContracts(deployer: NonceManager): Promise<[EntryPoint, StudentDeployer, UniversityDeployer]> {
+    // Deploy EntryPoint contract using TypeChain factory
+    const entryPointFactory = new EntryPoint__factory(deployer);
+    const entryPoint = await entryPointFactory.deploy();
+
+    // Deploy StudentDeployer contract using TypeChain factory
+    const studentDeployerFactory = new StudentDeployer__factory(deployer);
+    const studentDeployer = await studentDeployerFactory.deploy();
+
+    // Deploy UniversityDeployer contract using TypeChain factory
+    const universityDeployerFactory = new UniversityDeployer__factory(deployer);
+    const universityDeployer = await universityDeployerFactory.deploy();
+
+    // Wait for deployments to be mined
+    await Promise.all([
+        entryPoint.waitForDeployment(),
+        studentDeployer.waitForDeployment(),
+        universityDeployer.waitForDeployment()
+    ]);
+
+    return [entryPoint, studentDeployer, universityDeployer];
+}
+
+/**
+ * Deploys the application-specific contracts for the EduWallet system:
+ * - StudentsRegister: Central registry that manages university and student accounts
+ * - Paymaster: Contract that sponsors gas fees for users of the system
+ * @param deployer - NonceManager instance that handles transaction ordering
+ * @param entryPoint - Deployed EntryPoint contract instance
+ * @param studentDeployer - Deployed StudentDeployer contract instance
+ * @param universityDeployer - Deployed UniversityDeployer contract instance
+ * @returns {Promise<[StudentsRegister, Paymaster]>} Pair of deployed contract instances
+ */
+async function deployApplicationContracts(
+    deployer: NonceManager,
+    entryPoint: EntryPoint,
+    studentDeployer: any,
+    universityDeployer: any
+): Promise<[StudentsRegister, Paymaster]> {
+    // Get deployed contract addresses
+    const [entryPointAddress, studentDeployerAddress, universityDeployerAddress] =
+        await Promise.all([
+            entryPoint.getAddress(),
+            studentDeployer.getAddress(),
+            universityDeployer.getAddress()
+        ]);
+
+    // Deploy StudentsRegister contract using TypeChain factory
+    const studentsRegisterFactory = new StudentsRegister__factory(deployer);
+    const register = await studentsRegisterFactory.deploy(studentDeployerAddress, universityDeployerAddress, entryPoint);
+
+    // Deploy Paymaster contract using TypeChain factory
+    const paymasterFactory = new Paymaster__factory(deployer);
+    const paymaster = await paymasterFactory.deploy(entryPointAddress);
+
+    // Wait for deployments to be mined
+    await Promise.all([
+        register.waitForDeployment(),
+        paymaster.waitForDeployment()
+    ]);
+
+    return [register, paymaster];
+}
+
+/**
+ * Funds the paymaster contract with ETH to cover gas fees for users.
+ * @param entryPoint - EntryPoint contract that will hold the deposit
+ * @param paymaster - Paymaster contract that will use the deposit
+ * @returns {Promise<void>} Promise that resolves when funding is complete
+ */
+async function fundPaymaster(entryPoint: EntryPoint, paymaster: any): Promise<void> {
+    const paymasterAddress = await paymaster.getAddress();
+
+    // Deposit 1M ETH to the paymaster (this is for testing purposes)
+    const tx = await entryPoint.depositTo(paymasterAddress, {
+        value: parseEther("1000000")
+    });
+
+    // Wait for transaction confirmation
+    await tx.wait();
+}
+
+/**
+ * Logs the addresses of all deployed contracts to the console.
+ * @param entryPointAddress - Address of the EntryPoint contract
+ * @param studentDeployerAddress - Address of the StudentDeployer contract
+ * @param universityDeployerAddress - Address of the UniversityDeployer contract
+ * @param paymasterAddress - Address of the Paymaster contract
+ * @param studentsRegisterAddress - Address of the StudentsRegister contract
+ */
+function logDeploymentAddresses(
+    entryPointAddress: string,
+    studentDeployerAddress: string,
+    universityDeployerAddress: string,
+    paymasterAddress: string,
+    studentsRegisterAddress: string
+): void {
+    console.log(`\n---------------------------------------------------`);
+    console.log(`ENTRY POINT:`);
+    console.log(`Address: ${entryPointAddress}`);
+    console.log(`---------------------------------------------------`);
+    console.log(`STUDENT DEPLOYER:`);
+    console.log(`Address: ${studentDeployerAddress}`);
+    console.log(`---------------------------------------------------`);
+    console.log(`UNIVERSITY DEPLOYER:`);
+    console.log(`Address: ${universityDeployerAddress}`);
+    console.log(`---------------------------------------------------`);
+    console.log(`PAYMASTER:`);
+    console.log(`Address: ${paymasterAddress}`);
+    console.log(`---------------------------------------------------`);
+    console.log(`STUDENT REGISTER:`);
+    console.log(`Address: ${studentsRegisterAddress}`);
+    console.log(`---------------------------------------------------\n`);
 }
 
 /**
@@ -123,7 +235,7 @@ export async function deployStudentsRegister(): Promise<void> {
 function getUniversityWallet(): Wallet {
     try {
         // Generate a random private key for the university
-        const privateKey = crypto.randomBytes(32).toString('hex');
+        const privateKey = randomBytes(32).toString('hex');
         const universityPrivateKey = `0x${privateKey}`;
         const wallet = new Wallet(universityPrivateKey, PROVIDER);
 
@@ -157,34 +269,34 @@ export async function subscribeUniversity(name: string, country: string, shortNa
         throw new Error("Students register not deployed - run deployStudentsRegister first");
     }
 
+    if (!entryP) {
+        throw new Error("Entry point not deployed - run deployStudentsRegister first");
+    }
+
     try {
-        const university = getUniversityWallet();
+        // Store the university wallet for future operations
+        uni = getUniversityWallet();
 
-        // Fund the university wallet with a substantial balance
-        const balance = ethers.parseEther("10000000.0")
-        const deployer = getDeployer();
+        const managedDeployer = new NonceManager(deployer);
 
-        // Send funds from deployer to the new university wallet
-        const tx = await deployer.sendTransaction({
-            to: university.address,
-            value: balance,
-        })
-
-        // Wait for the transaction to be confirmed
-        await tx.wait();
+        const fundTx = await managedDeployer.sendTransaction({
+            to: uni.address,
+            value: parseEther('10000'),
+        });
 
         // Subscribe the university to the register
-        const universityTx = await studentsRegister.connect(university).subscribe(
+        const universityTx = await studentsRegister.connect(managedDeployer).subscribe(
+            uni.address,
             name,
             country,
             shortName
         );
 
-        // Store the university wallet for future operations
-        uni = university;
-
-        // Wait for the transaction to be confirmed
-        await universityTx.wait();
+        // Wait for the transactions to be confirmed
+        await Promise.all([
+            universityTx.wait(),
+            fundTx.wait()
+        ]);
     } catch (error) {
         throw new Error(`${error}`);
     }
@@ -219,37 +331,72 @@ export async function registerStudent(name: string, surname: string, birthDate: 
                 country,
             });
 
+        // Fund student's ETH wallet
+        const studentEthWallet = await getStudentWallet(student.id, student.password);
+
+        const fundTx = await deployer.sendTransaction({
+            to: studentEthWallet.address,
+            value: parseEther('10000'),
+        });
+
+        await fundTx.wait();
+
         // Display student credentials
         console.log(`\n---------------------------------------------------`);
         console.log(`STUDENT:`);
-        if (VERBOSE) {
-            console.log(`Address: ${student.ethWallet.address}`);
-        }
         console.log(`Wallet address: ${student.academicWalletAddress}`);
         console.log(`Id: ${student.id}`);
         console.log(`Password: ${student.password}`);
         console.log(`---------------------------------------------------\n`);
-
-        // Fund the wallet
-        if (VERBOSE) {
-            console.log("\nFunding the password-derived wallet...");
-        }
-
-        // Create a transaction to fund the student wallet
-        const balance = ethers.parseEther("10000.0")
-        const tx = await deployer.sendTransaction({
-            to: student.ethWallet.address,
-            value: balance,
-        });
-
-        // Wait for the transaction to be confirmed
-        await tx.wait();
-
-        if (VERBOSE) {
-            console.log(`Balance: ${ethers.formatEther(balance)}`);
-        }
     } catch (error) {
         throw new Error(`${error}`);
+    }
+}
+
+/**
+ * Creates a student wallet using deterministic key derivation from credentials.
+ * Uses the student ID and password to derive a consistent private key.
+ * @author Diego Da Giau
+ * @param {string} id - The student's unique identifier, used as salt in key derivation
+ * @param {string} password - The student's password for key derivation
+ * @returns {Promise<Wallet>} Ethereum wallet instance connected to the provider
+ * @throws {Error} If credentials are missing or key derivation fails
+ */
+export async function getStudentWallet(id: string, password: string): Promise<Wallet> {
+    try {
+        if (!password || !id) {
+            throw new Error('Invalid credentials: Missing password or ID');
+        }
+        const privateKey = derivePrivateKey(password, id);
+        return new Wallet(privateKey);
+    } catch (error) {
+        throw new Error('Could not create student wallet from credentials');
+    }
+}
+
+/**
+ * Derives a deterministic private key from a password and student ID using PBKDF2.
+ * This creates a reproducible key that can be reconstructed with the same inputs,
+ * allowing students to access their wallets consistently across sessions.
+ * @author Diego Da Giau
+ * @param {string} password - User password for key derivation
+ * @param {string} studentId - Student ID used as salt in the derivation process
+ * @returns {string} Ethereum-compatible private key with 0x prefix
+ * @throws {Error} If the key derivation process fails
+ */
+function derivePrivateKey(password: string, studentId: string): string {
+    try {
+        // Number of PBKDF2 iterations for security
+        const iterations = 100000;
+
+        // 32 bytes = 256 bits for Ethereum compatibility
+        const keyLength = 32;
+
+        const derivedKey = pbkdf2Sync(password, studentId, iterations, keyLength, 'sha256').toString('hex');
+        // Add Ethereum hex prefix
+        return '0x' + derivedKey;
+    } catch (error) {
+        throw new Error('Failed to derive private key: ' + (error instanceof Error ? error.message : String(error)));
     }
 }
 
@@ -267,7 +414,6 @@ export async function getStudentInfo(studentWallet: string): Promise<void> {
     }
 
     try {
-        console.log("\nFetching student info...");
         // Retrieve student information using the SDK
         const studentNew = await eduwallet.getStudentInfo(uni, studentWallet);
 
@@ -347,17 +493,9 @@ export async function enrollStudent(studentWallet: string, courses: eduwallet.Co
         if (VERBOSE) {
             console.log("\nEnrolling student...");
         }
+
         // Use the SDK to enroll the student in the courses
-        let failedCourses = await eduwallet.enrollStudent(uni, studentWallet, courses);
-
-        // TODO: Implement retry logic for failed enrollments
-        // while (tx.length > 0) {
-        //     tx = await eduwallet.enrollStudent(uni, studentWallet, courses);
-        // }
-
-        if (failedCourses.length > 0) {
-            throw new Error(`Failed to enroll student in ${failedCourses.length} courses`);
-        }
+        await eduwallet.enrollStudent(uni, studentWallet, courses);
     } catch (error) {
         throw new Error(`${error}`);
     }
@@ -383,16 +521,7 @@ export async function evaluateStudent(studentWallet: string, evaluations: eduwal
         }
 
         // Use the SDK to record evaluations for the student
-        let failedCourses = await eduwallet.evaluateStudent(uni, studentWallet, evaluations);
-
-        // TODO: Implement retry logic for failed evaluations
-        // while (tx.length > 0) {
-        //     tx = await eduwallet.evaluateStudent(uni, studentWallet, evaluations);
-        // }
-
-        if (failedCourses.length > 0) {
-            throw new Error(`Failed to evaluate student in ${failedCourses.length} courses`);
-        }
+        await eduwallet.evaluateStudent(uni, studentWallet, evaluations);
     } catch (error) {
         throw new Error(`${error}`);
     }
@@ -419,10 +548,6 @@ export async function requestPermission(studentWallet: string, permission: eduwa
 
         // Use the SDK to request permission for the student's wallet
         await eduwallet.askForPermission(uni, studentWallet, permission);
-
-        if (VERBOSE) {
-            console.log(`Permission request submitted successfully`);
-        }
     } catch (error) {
         throw new Error(`${error}`);
     }
