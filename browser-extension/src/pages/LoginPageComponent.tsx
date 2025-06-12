@@ -11,9 +11,6 @@ import type { JSX } from "react";
  * LoginPage component renders a login form for users to authenticate with their ID and password.
  * @author Diego Da Giau
  * @returns {JSX.Element} The rendered login page component.
- * @remarks
- * It prevents the default behavior of the arrow keys in the ID input field to avoid changing the
- * input value.
  */
 export default function LoginPage(): JSX.Element {
     const login = useAuth().login;

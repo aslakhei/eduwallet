@@ -28,8 +28,9 @@ contract StudentsRegister is Ownable {
 
     // State variables
     mapping(address university => address universityAccount)
-        private universityAccounts;
-    mapping(address student => address studentAccount) private studentAccounts;
+        private universities;
+    mapping(address student => address studentAccount) private students;
+    mapping(address universityAccount => bool) private universitiesAccounts;
 
     /**
      * @notice Initializes the StudentsRegister contract with required deployers and entry point
@@ -62,7 +63,7 @@ contract StudentsRegister is Ownable {
         string calldata _shortName
     ) external onlyOwner {
         // Check if university is not already registered
-        if (universityAccounts[_address] != address(0)) {
+        if (universities[_address] != address(0)) {
             revert AlreadyExistingUniversity();
         }
 
@@ -76,7 +77,8 @@ contract StudentsRegister is Ownable {
         );
 
         // Map university address to deployed account
-        universityAccounts[_address] = addr;
+        universities[_address] = addr;
+        universitiesAccounts[addr] = true;
     }
 
     /**
@@ -85,7 +87,7 @@ contract StudentsRegister is Ownable {
      * @custom:throws UniversityNotPresent if university is not registered
      */
     function getUniversityAccount() external view returns (address) {
-        address account = universityAccounts[_msgSender()];
+        address account = universities[_msgSender()];
         if (account != address(0)) {
             return account;
         }
@@ -103,11 +105,11 @@ contract StudentsRegister is Ownable {
         Student.StudentBasicInfo calldata _basicInfo
     ) external {
         // Check if the caller is a verified university
-        if (universityAccounts[_msgSender()] == address(0)) {
+        if (universitiesAccounts[_msgSender()] != true) {
             revert RestrictedFunction();
         }
         // Check if student is not already registered
-        if (studentAccounts[_student] != address(0)) {
+        if (students[_student] != address(0)) {
             revert AlreadyExistingStudent();
         }
 
@@ -120,7 +122,7 @@ contract StudentsRegister is Ownable {
         );
 
         // Store student's contract address
-        studentAccounts[_student] = studentAddr;
+        students[_student] = studentAddr;
     }
 
     /**
@@ -129,7 +131,7 @@ contract StudentsRegister is Ownable {
      * @custom:throws StudentNotPresent if student is not registered
      */
     function getStudentAccount() external view returns (address) {
-        address account = studentAccounts[_msgSender()];
+        address account = students[_msgSender()];
         if (account != address(0)) {
             return account;
         }

@@ -5,7 +5,6 @@ pragma solidity >=0.8.2;
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@account-abstraction/contracts/core/BaseAccount.sol";
 import "@account-abstraction/contracts/core/Helpers.sol";
-import "hardhat/console.sol";
 
 // Custom errors for better clarity
 error UnauthorizedCall();

@@ -1,4 +1,3 @@
-import { keccak256, NonceManager, toUtf8Bytes } from "ethers";
 import type { Wallet } from "ethers";
 import type { CourseInfo, Evaluation, Student, StudentCredentials, StudentData } from "./types";
 import { PermissionType } from "./types";
@@ -11,16 +10,15 @@ import type { Student as StudentContract } from '@typechain/contracts/Student';
 /**
  * Re-export types for SDK consumers
  */
-export type { StudentCredentials, StudentData, CourseInfo, Evaluation, Student };
+export type { StudentCredentials, StudentData, CourseInfo, Evaluation, Student}
 export { PermissionType };
-export { getStudentsRegister };
 
 // Configure dayjs to use UTC for consistent date handling across timezones
 dayjs.extend(utc);
 
 /**
  * Registers a new student in the academic blockchain system.
- * Creates both a student Ethereum wallet and academic record.
+ * Creates both a student EOA and smart account.
  * @author Diego Da Giau
  * @param {Wallet} universityWallet - The university wallet with registration permissions
  * @param {StudentData} student - The student information to register
@@ -213,7 +211,7 @@ export async function evaluateStudent(universityWallet: Wallet, studentWalletAdd
  * Retrieves basic student information from the blockchain.
  * Only fetches personal data without academic results.
  * @author Diego Da Giau
- * @param {Wallet} universityWallet - The university wallet with read permissions
+ * @param {Wallet} universityWallet - The university wallet
  * @param {string} studentWalletAddress - The student's academic wallet address
  * @returns {Promise<Student>} The student's basic information
  * @throws {Error} If university wallet is missing, student address is invalid, or data retrieval fails

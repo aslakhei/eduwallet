@@ -6,7 +6,7 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsup",
-    "generate-docs": "jsdoc2md --configure jsdoc2md.json --files src/**/*.ts > README.md",
+    "generate-docs": "jsdoc2md --configure jsdoc2md.json --files src/types.ts > README.md",
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix"
   },

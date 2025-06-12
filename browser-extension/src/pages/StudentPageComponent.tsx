@@ -1,5 +1,3 @@
-import "../styles/UserPageStyle.css"
-
 import { Col, Container, Image, Row } from "react-bootstrap";
 import { useNavigate } from "react-router-dom";
 import List from "../components/ListComponent";
@@ -7,7 +5,7 @@ import { useAuth } from "../providers/AuthenticationProvider";
 import type { JSX } from "react";
 
 /**
- * UserPage component displays the student's profile information. It renders the student's profile information in a structured layout.
+ * StudentPage component displays the student's profile information. It renders the student's profile information in a structured layout.
  * @author Diego Da Giau
  * @returns {JSX.Element} The rendered UserPage component.
  */
