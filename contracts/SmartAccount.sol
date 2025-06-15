@@ -16,6 +16,7 @@ error ViewCallFailed(bytes errorData);
  * @author Diego Da Giau
  * @notice ERC-4337 compatible smart contract wallet enabling gas-less transactions
  * @dev Implements BaseAccount for ERC-4337 support with signature-based authorization
+ * Code adapted from: https://github.com/eth-infinitism/account-abstraction/
  */
 abstract contract SmartAccount is BaseAccount {
     // The EOA owner address that controls this smart account

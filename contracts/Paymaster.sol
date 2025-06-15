@@ -9,6 +9,7 @@ import "@account-abstraction/contracts/core/BasePaymaster.sol";
  * @author Diego Da Giau
  * @dev Basic paymaster implementation that sponsors gas fees for user operations
  * Inherits from BasePaymaster to handle deposit management and withdrawals
+ * Code adapted from: https://github.com/eth-infinitism/account-abstraction/
  */
 contract Paymaster is BasePaymaster {
     /**

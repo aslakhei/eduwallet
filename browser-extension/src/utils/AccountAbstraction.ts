@@ -15,6 +15,7 @@ const DOMAIN_VERSION = '1';
  * Returns the EIP-712 domain for ERC-4337 user operations.
  * @param entryPoint EntryPoint contract address
  * @param chainId Chain ID
+ * Code adapted from: https://github.com/eth-infinitism/account-abstraction/
  */
 export function getErc4337TypedDataDomain(entryPoint: string, chainId: number): TypedDataDomain {
     return {
@@ -27,6 +28,7 @@ export function getErc4337TypedDataDomain(entryPoint: string, chainId: number): 
 
 /**
  * Returns the EIP-712 types for ERC-4337 user operations.
+ * Code adapted from: https://github.com/eth-infinitism/account-abstraction/
  */
 export function getErc4337TypedDataTypes(): { [type: string]: TypedDataField[] } {
     return {
@@ -50,6 +52,7 @@ export function getErc4337TypedDataTypes(): { [type: string]: TypedDataField[] }
  * @param postOpGasLimit Gas limit for post-operation
  * @param paymasterData Additional paymaster data
  * @returns Packed paymasterAndData bytes
+ * Code adapted from: https://github.com/eth-infinitism/account-abstraction/
  */
 function packPaymasterData(
     paymaster: string,
