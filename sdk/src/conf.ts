@@ -73,7 +73,7 @@ export const ipfsConfig: IpfsStorageConfig = {
     /** IPFS gateway url. */
     gatewayUrl: "https://ipfs.io/ipfs/",
     /** S3 bucket name. */
-    bucketName: "eduwallet",
+    bucketName: "",
     /** S3 client configuration object. */
     s3Config: {
         /** S3 API version. */
