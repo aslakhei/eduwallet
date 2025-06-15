@@ -45,8 +45,8 @@ const validateDate = (input: string): string | boolean => {
 
     // Check if the date is after Unix epoch (1970-01-01)
     const unixEpoch = new Date('1970-01-01');
-    if (date < unixEpoch) {
-        return 'The date must be on or after January 1, 1970';
+    if (date <= unixEpoch) {
+        return 'The date must be after January 1, 1970';
     }
 
     // Check if the date is in the past
@@ -252,8 +252,8 @@ async function registerUniversityCommand(): Promise<void> {
             await subscribeUniversity(answers.name, answers.country, answers.shortName);
             spinner.succeed('University subscribed successfully!');
         } catch (error) {
-            spinner.fail(`Failed to subscribe the university`);
-            console.error('University subscription error details:', error);
+            spinner.fail(`Failed to subscribe the university. Try again.`);
+            //console.error('University subscription error details:', error);
         }
     } catch (error) {
         console.error('Failed to collect university information:', error);
@@ -306,8 +306,8 @@ async function registerStudentCommand(): Promise<void> {
             await registerStudent(answers.name, answers.surname, answers.birthDate, answers.birthPlace, answers.country);
             spinner.succeed('Student registered successfully!');
         } catch (error) {
-            spinner.fail(`Failed to register the student`);
-            console.error('Student registration error details:', error);
+            spinner.fail(`Failed to register the student. Try again.`);
+            //console.error('Student registration error details:', error);
         }
     } catch (error) {
         console.error('Failed to collect student information:', error);
@@ -329,8 +329,8 @@ async function getStudentInfoCommand(): Promise<void> {
             await getStudentInfo(address);
             spinner.succeed("Student's personal details retrieved successfully");
         } catch (error) {
-            spinner.fail(`Failed to retrieve the student's personal details. Check the address`);
-            console.error('Student info retrieval error details:', error);
+            spinner.fail(`Failed to retrieve the student's personal details. Check the address.`);
+            //console.error('Student info retrieval error details:', error);
         }
     } catch (error) {
         console.error('Failed to collect wallet address:', error);
@@ -352,8 +352,8 @@ async function getStudentResultsCommand(): Promise<void> {
             await getStudentInfoResults(address);
             spinner.succeed("Student's personal details and academic results retrieved successfully");
         } catch (error) {
-            spinner.fail("Failed to retrieve student's personal details and the academic results. Check the address or your permission");
-            console.error('Student info and results retrieval error details:', error);
+            spinner.fail("Failed to retrieve student's personal details and the academic results. Check the address or your permission.");
+            //console.error('Student info and results retrieval error details:', error);
         }
     } catch (error) {
         console.error('Failed to collect wallet address:', error);
@@ -437,7 +437,7 @@ async function enrollStudentCommand(): Promise<void> {
 
         // Process enrollment with visual feedback
         if (courses.length === 0) {
-            console.log('No courses added. Enrollment cancelled.');
+            console.error('No courses added. Enrollment cancelled.');
             return;
         }
 
@@ -447,7 +447,7 @@ async function enrollStudentCommand(): Promise<void> {
             spinner.succeed('Student enrolled successfully');
         } catch (error) {
             spinner.fail(`Failed to enroll the student`);
-            console.error('Student enrollment error details:', error);
+            //console.error('Student enrollment error details:', error);
         }
     } catch (error) {
         console.error('Failed to complete enrollment process:', error);
@@ -539,7 +539,7 @@ async function evaluateStudentCommand(): Promise<void> {
             spinner.succeed('Student evaluated successfully');
         } catch (error) {
             spinner.fail(`Failed to evaluate student`);
-            console.error('Student evaluation error details:', error);
+            //console.error('Student evaluation error details:', error);
         }
     } catch (error) {
         console.error('Failed to complete evaluation process:', error);
@@ -590,8 +590,8 @@ async function requestPermissionCommand(): Promise<void> {
             await requestPermission(address, permission);
             spinner.succeed('Permission requested successfully');
         } catch (error) {
-            spinner.fail('Failed to request permission');
-            console.error('Permission request error details:', error);
+            spinner.fail(`Failed to request permission. Maybe you already have the requested permission or a higher one...`);
+            //console.error('Permission request error details:', error);
         }
     } catch (error) {
         console.error('Failed to collect permission request information:', error);
@@ -616,7 +616,7 @@ async function verifyPermissionCommand(): Promise<void> {
             spinner.succeed('Permission verified successfully');
         } catch (error) {
             spinner.fail('Failed to verify the permission');
-            console.error('Permission verification error details:', error);
+            //console.error('Permission verification error details:', error);
         }
     } catch (error) {
         console.error('Failed to collect wallet address:', error);
@@ -648,7 +648,7 @@ async function changeUniversityCommand(): Promise<void> {
             spinner.succeed('Current university changed successfully');
         } catch (error) {
             spinner.fail('Failed to change the current university');
-            console.error('University change error details:', error);
+            //console.error('University change error details:', error);
         }
     } catch (error) {
         console.error('Failed to collect university private key:', error);
@@ -737,7 +737,7 @@ async function mainMenu(): Promise<void> {
                     break;
             }
         } catch (error) {
-            console.error('An unexpected error occurred in the main menu:', error);
+            //console.error('An unexpected error occurred in the main menu:', error);
             console.log('Restarting menu...');
         }
     }
@@ -750,7 +750,7 @@ async function main() {
         await deployRegisterContract();
         await mainMenu();
     } catch (error) {
-        console.error('A critical error occurred:', error);
+        //console.error('A critical error occurred:', error);
         process.exit(1);
     }
 }

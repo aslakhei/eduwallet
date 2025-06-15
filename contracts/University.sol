@@ -10,9 +10,6 @@ import {IEntryPoint} from "@account-abstraction/contracts/interfaces/IEntryPoint
  * @author Diego Da Giau
  * @notice Manages a university's basic information in the educational system
  * @dev Simple storage contract for university details
- *
- * TODO: Add input validation. Add events if necessary.
- * ? Is it better to save data as immutable and then return the struct when getUniversity info is called?
  */
 contract University is SmartAccount {
     /**

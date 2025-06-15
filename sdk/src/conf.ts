@@ -1,12 +1,5 @@
 import { S3Client, S3ClientConfig } from "@aws-sdk/client-s3";
-import * as dotenv from 'dotenv'
 import { JsonRpcProvider, id } from "ethers";
-
-/**
- * Load environment variables from .env file.
- * This allows configuration to be customized per environment without code changes.
- */
-dotenv.config();
 
 /**
  * Configuration for blockchain network connections.
@@ -57,47 +50,45 @@ interface RoleCodes {
 
 /**
  * Blockchain network configuration.
- * Uses environment variables when available, falls back to development defaults.
  */
 export const blockchainConfig: BlockchainNetworkConfig = {
-    /** Chain identifier - configure via CHAIN_ID env var. */
-    chainId: process.env.CHAIN_ID || "31337",
-    /** Network endpoint - configure via NETWORK_URL env var. */
-    url: process.env.NETWORK_URL || "http://127.0.0.1:8545",
-    /** StudentsRegister contract address - configure via REGISTER_ADDRESS env var. */
-    registerAddress: process.env.REGISTER_ADDRESS || "0x51a240271AB8AB9f9a21C82d9a85396b704E164d",
-    /** EntryPoint contract address - configure via ENTRYPOINT_ADDRESS env var. */
-    entryPointAddress: process.env.ENTRYPOINT_ADDRESS || "0xF2E246BB76DF876Cef8b38ae84130F4F55De395b",
-    /** Paymaster contract address - configure via PAYMASTER_ADDRESS env var. */
-    paymasterAddress: process.env.PAYMASTER_ADDRESS || "0xB9816fC57977D5A786E654c7CF76767be63b966e",
-    /** StudentFactory contract address - configure via STUDENT_FACTORY_ADDRESS env var. */
-    studentFactoryAddress: process.env.STUDENT_FACTORY_ADDRESS || "0x2946259e0334f33a064106302415ad3391bed384",
+    /** Chain identifier. */
+    chainId: "31337",
+    /** Network endpoint. */
+    url: "http://127.0.0.1:8545",
+    /** StudentsRegister contract address. */
+    registerAddress: "0x51a240271AB8AB9f9a21C82d9a85396b704E164d",
+    /** EntryPoint contract address. */
+    entryPointAddress: "0xF2E246BB76DF876Cef8b38ae84130F4F55De395b",
+    /** Paymaster contract address. */
+    paymasterAddress: "0xB9816fC57977D5A786E654c7CF76767be63b966e",
+    /** StudentFactory contract address. */
+    studentFactoryAddress: "0x2946259e0334f33a064106302415ad3391bed384",
 }
 
 /**
  * IPFS storage configuration via S3-compatible service.
- * Uses environment variables when available, falls back to development defaults.
  */
 export const ipfsConfig: IpfsStorageConfig = {
-    /** IPFS gateway url - configure via IPFS_GATEWAY env var. */
-    gatewayUrl: process.env.IPFS_GATEWAY || "https://ipfs.io/ipfs/",
-    /** S3 bucket name - configure via S3_BUCKET env var. */
-    bucketName: process.env.S3_BUCKET || "eduwallet",
+    /** IPFS gateway url. */
+    gatewayUrl: "https://ipfs.io/ipfs/",
+    /** S3 bucket name. */
+    bucketName: "eduwallet",
     /** S3 client configuration object. */
     s3Config: {
         /** S3 API version. */
         apiVersion: "2006-03-01",
         /** Authentication credentials. */
         credentials: {
-            /** Access key ID - configure via S3_ACCESS_KEY env var. */
-            accessKeyId: process.env.S3_ACCESS_KEY || "0419FE4769472C04145F",
-            /** Secret access key - configure via S3_SECRET_KEY env var. */
-            secretAccessKey: process.env.S3_SECRET_KEY || "Q5ZMwqobNDwz0u8MTb7diw1ql2uo8JqL8EzYjbO1",
+            /** Access key ID. */
+            accessKeyId: "",
+            /** Secret access key. */
+            secretAccessKey: "",
         },
-        /** S3 endpoint URL - configure via S3_ENDPOINT env var. */
-        endpoint: process.env.S3_ENDPOINT || "https://s3.filebase.com",
-        /** AWS region - configure via S3_REGION env var. */
-        region: process.env.S3_REGION || "us-east-1",
+        /** S3 endpoint URL. */
+        endpoint: "https://s3.filebase.com",
+        /** AWS region. */
+        region: "us-east-1",
         /** Use path-style addressing instead of virtual-hosted style. */
         forcePathStyle: true
     }
@@ -135,9 +126,8 @@ export const roleCodes: RoleCodes = {
 /**
  * Debug mode flag. When true, logs errors to the console.
  * Set to false in production to minimize console output.
- * Can be configured via the DEBUG environment variable.
  */
-export const DEBUG = process.env.DEBUG || true;
+export const DEBUG = false;
 
 /**
  * Conditionally logs errors to the console based on the DEBUG flag.

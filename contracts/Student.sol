@@ -15,8 +15,6 @@ error PermissionAlreadyGiven();
  * @author Diego Da Giau
  * @notice Manages a student's academic records and university permissions
  * @dev Implements role-based access control for universities to manage student records
- *
- * TODO: Add input validation. Change require with if statements, revert and custom errors. See library for the validation part.
  */
 contract Student is SmartAccount, AccessControlEnumerable {
     // Role definitions for access control
@@ -217,7 +215,7 @@ contract Student is SmartAccount, AccessControlEnumerable {
                     studentInfo.results[j].date = _evaluations[i].date;
                     studentInfo.results[j].certificateHash = _evaluations[i]
                         .certificateHash;
-                    return;
+                    continue;
                 }
             }
         }

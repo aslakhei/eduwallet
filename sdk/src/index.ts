@@ -40,8 +40,8 @@ export async function registerStudent(universityWallet: Wallet, student: Student
             throw new Error('Student data is incomplete - all fields are required');
         }
 
-        if (new Date(student.birthDate) < new Date('1970-01-01')) {
-            throw new Error('Student birthdate is incompatible - the date must be on or after 1970-01-01')
+        if (new Date(student.birthDate) <= new Date('1970-01-01')) {
+            throw new Error('Student birthdate is incompatible - the date must be after 1970-01-01')
         }
 
         // Get contract instance
@@ -168,8 +168,8 @@ export async function evaluateStudent(universityWallet: Wallet, studentWalletAdd
             if (!evaluation.evaluationDate) {
                 throw new Error(`Evaluation at index ${index} missing required field: evaluationDate`);
             }
-            if (new Date(evaluation.evaluationDate) < new Date('1970-01-01')) {
-                throw new Error('Student birthdate is incompatible - the date must be on or after 1970-01-01')
+            if (new Date(evaluation.evaluationDate) <= new Date('1970-01-01')) {
+                throw new Error('Student birthdate is incompatible - the date must be after 1970-01-01')
             }
         });
 
@@ -344,7 +344,7 @@ export async function askForPermission(universityWallet: Wallet, studentWalletAd
 
         await sendTransaction(connectedUniversity, studentWallet, studentWalletAddress, 'askForPermission', [permission]);
     } catch (error) {
-        console.error('Failed to request permission:', error);
+        logError('Failed to request permission:', error);
         throw new Error('Failed to request permission');
     }
 }
@@ -387,7 +387,7 @@ export async function verifyPermission(universityWallet: Wallet, studentWalletAd
         // If no permission, return null
         return null;
     } catch (error) {
-        console.error('Failed to verify permission:', error);
+        logError('Failed to verify permission:', error);
         throw new Error('Failed to verify permission');
     }
 }
