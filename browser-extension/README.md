@@ -1,50 +1,88 @@
-# React + TypeScript + Vite
+# Browser Extension
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+## Table of Contents
 
-Currently, two official plugins are available:
+- [Browser Extension](#browser-extension)
+  - [Table of Contents](#table-of-contents)
+  - [🧭Overview](#overview)
+  - [📁Structure](#structure)
+    - [public](#public)
+    - [src/components/](#srccomponents)
+    - [src/models/](#srcmodels)
+    - [src/pages/](#srcpages)
+    - [src/providers/](#srcproviders)
+    - [src/styles/](#srcstyles)
+    - [src/utils/](#srcutils)
+    - [src/API.tsx](#srcapitsx)
+    - [vite.config.ts](#viteconfigts)
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## 🧭Overview
 
-## Expanding the ESLint configuration
+This folder contains the React-based Chrome extension that serves as the student interface for the EduWallet system. The extension allows students to access and manage their academic records wallet.
 
-If you are developing a production application, we recommend updating the configuration to enable type aware lint rules:
+## 📁Structure
 
-- Configure the top-level `parserOptions` property like this:
-
-```js
-export default tseslint.config({
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
+```bash
+browser-extension/
+├── public/
+├── src/
+│   ├── components/
+│   ├── models/
+│   ├── pages/
+│   ├── providers/
+│   ├── styles/
+│   ├── utils/
+│   ├── ...
+│   └── API.tsx/
+├── ...
+└── vite.config.ts
 ```
 
-- Replace `tseslint.configs.recommended` to `tseslint.configs.recommendedTypeChecked` or `tseslint.configs.strictTypeChecked`
-- Optionally add `...tseslint.configs.stylisticTypeChecked`
-- Install [eslint-plugin-react](https://github.com/jsx-eslint/eslint-plugin-react) and update the config:
+### [public](./public/)
 
-```js
-// eslint.config.js
-import react from 'eslint-plugin-react'
+Contains static assets and configuration files that are served directly without processing during the build step.
 
-export default tseslint.config({
-  // Set the react version
-  settings: { react: { version: '18.3' } },
-  plugins: {
-    // Add the react plugin
-    react,
-  },
-  rules: {
-    // other rules...
-    // Enable its recommended rules
-    ...react.configs.recommended.rules,
-    ...react.configs['jsx-runtime'].rules,
-  },
-})
-```
+`manifest.json` is the core configuration file for the Chrome extension that defines:
+
+- Extension metadata (name, version, description)
+- Permissions required (scripting, tabs, activeTab)
+- Icon paths for different display contexts
+- Extension behavior settings
+- Browser action configuration (popup)
+- Content security policies
+
+### [src/components/](./src/components/)
+
+Contains the core reusable UI components that form the foundation of the EduWallet Chrome extension interface.
+
+### [src/models/](./src/models/)
+
+Contains TypeScript definitions for the core data structures used throughout the EduWallet application.
+
+### [src/pages/](./src/pages/)
+
+Contains the main views of the EduWallet Chrome extension, each representing a different screen in the application flow.
+
+### [src/providers/](./src/providers/)
+
+Implements the application state management using React Context API. These providers create data contexts that can be accessed throughout the application hierarchy.
+
+### [src/styles/](./src/styles/)
+
+Contains CSS files that define the visual appearance of the EduWallet extension's components and pages. Each file corresponds to a specific component or page, following a modular approach to styling.
+
+### [src/utils/](./src/utils/)
+
+Contains utility functions and configurations that power the core blockchain interactions and data transformations within the EduWallet extension.
+
+### [src/API.tsx](./src/API.tsx)
+
+Serves as the interface layer between the EduWallet extension's UI components and the blockchain smart contracts. It abstracts complex blockchain interactions into simple, functional API calls
+
+### [vite.config.ts](vite.config.ts)
+
+Configures the build process for the EduWallet Chrome extension using Vite as the build tool.
+**Key plugins:**
+
+- Compression Plugin (*viteCompression*): Compresses the output files using the Brotli algorithm to reduce the extension's size.
+- Visualizer Plugin (*visualizer*): Generates a visual representation of the bundle size in `dist/stats.html`.
