@@ -94,7 +94,7 @@ Configures the [Hardhat](https://hardhat.org/) development environment for the p
 
 🛠**Browser extension installation:**
 
-1. After building the extension, follow [the official guide](https://developer.chrome.com/docs/extensions/get-started/tutorial/hello-world?hl=en#load-unpacked) to **Load an unpacked extension** in Chrome.
+1. After building the extension, follow [the official guide](https://developer.chrome.com/docs/extensions/get-started/tutorial/hello-world?hl=en#load-unpacked) to **load an unpacked extension** in Chrome. The extension directory corresponds to the `dist` folder within the `browser-extension` directory, which is generated during the build process.
 
 🚀**Run the system:**
 
