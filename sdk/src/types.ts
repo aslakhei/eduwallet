@@ -107,9 +107,36 @@ export interface University {
 }
 
 /**
- * Represents permission types that can be granted to universities.
+ * Employer information.
+ * Contains identifying details about an employer.
+ */
+export interface Employer {
+    /** Full official name of the company. */
+    readonly companyName: string;
+    /** Country where the company is located. */
+    readonly country: string;
+    /** Optional contact information (email, phone, etc.). */
+    readonly contactInfo?: string;
+}
+
+/**
+ * Employer registration data.
+ * Contains information required to register an employer.
+ */
+export interface EmployerData {
+    /** Full official name of the company. */
+    readonly companyName: string;
+    /** Country where the company is located. */
+    readonly country: string;
+    /** Optional contact information (email, phone, etc.). */
+    readonly contactInfo?: string;
+}
+
+/**
+ * Represents permission types that can be granted to universities and employers.
  */
 export enum PermissionType {
     Read,
     Write,
+    EmployerRead,
 }

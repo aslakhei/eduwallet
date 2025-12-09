@@ -1,8 +1,8 @@
-import type { Wallet } from "ethers";
-import type { CourseInfo, Evaluation, Student, StudentCredentials, StudentData } from "./types";
+import { Wallet } from "ethers";
+import type { CourseInfo, Evaluation, Student, StudentCredentials, StudentData, Employer, EmployerData, AcademicResult } from "./types";
 import { PermissionType } from "./types";
-import { computeDate, createStudentWallet, executeSmartAccountViewCall, generateStudent, getStudentContract, getStudentsRegister, getUniversityAccountAddress, publishCertificate, sendTransaction } from "./utils";
-import { blockchainConfig, DEBUG, logError, provider, roleCodes } from "./conf";
+import { computeDate, createStudentWallet, executeSmartAccountViewCall, generateStudent, getStudentContract, getStudentsRegister, getUniversityAccountAddress, getUniversitySmartAccount, getEmployerAccountAddress, getEmployer, getEmployerSmartAccount, getUniversities, publishCertificate, sendTransaction, AccountType } from "./utils";
+import { blockchainConfig, DEBUG, ipfsConfig, logError, provider, roleCodes } from "./conf";
 import dayjs from "dayjs";
 import utc from 'dayjs/plugin/utc.js';
 import type { Student as StudentContract } from '@typechain/contracts/Student';
@@ -10,7 +10,7 @@ import type { Student as StudentContract } from '@typechain/contracts/Student';
 /**
  * Re-export types for SDK consumers
  */
-export type { StudentCredentials, StudentData, CourseInfo, Evaluation, Student}
+export type { StudentCredentials, StudentData, CourseInfo, Evaluation, Student, Employer, EmployerData, AcademicResult}
 export { PermissionType };
 
 // Configure dayjs to use UTC for consistent date handling across timezones
@@ -61,7 +61,7 @@ export async function registerStudent(universityWallet: Wallet, student: Student
 
         const connectedStudent = studentEthWallet.ethWallet.connect(provider);
 
-        await sendTransaction(universityWallet, studentsRegister, blockchainConfig.registerAddress, 'registerStudent', [connectedStudent.address, basicInfo]);
+        await sendTransaction(universityWallet, studentsRegister, blockchainConfig.registerAddress, 'registerStudent', [connectedStudent.address, basicInfo], AccountType.University);
 
         const studentAccountAddress = await studentsRegister.connect(connectedStudent).getStudentAccount();
 
@@ -124,7 +124,7 @@ export async function enrollStudent(universityWallet: Wallet, studentWalletAddre
             };
         });
 
-        await sendTransaction(connectedUniversity, studentWallet, studentWalletAddress, 'enroll', [coursesInfo]);
+        await sendTransaction(connectedUniversity, studentWallet, studentWalletAddress, 'enroll', [coursesInfo], AccountType.University);
 
     } catch (error) {
         logError('Enrollment process failed:', error);
@@ -200,7 +200,7 @@ export async function evaluateStudent(universityWallet: Wallet, studentWalletAdd
             });
         }
 
-        await sendTransaction(connectedUniversity, studentWallet, studentWalletAddress, 'evaluate', [contractEvaluations]);
+        await sendTransaction(connectedUniversity, studentWallet, studentWalletAddress, 'evaluate', [contractEvaluations], AccountType.University);
     } catch (error) {
         logError('Evaluation process failed:', error);
         throw new Error('Student evaluation failed');
@@ -292,7 +292,7 @@ export async function getStudentWithResult(universityWallet: Wallet, studentWall
         // Fetch student data and results in parallel for efficiency
         const [student, results] = await Promise.all([
             getStudentInfo(universityWallet, studentWalletAddress),
-            executeSmartAccountViewCall(connectedUniversity, studentAccount, studentWalletAddress, 'getResults', []),
+            executeSmartAccountViewCall(connectedUniversity, studentAccount, studentWalletAddress, 'getResults', [], AccountType.University),
         ]);
 
         // Validate retrieved data
@@ -342,10 +342,339 @@ export async function askForPermission(universityWallet: Wallet, studentWalletAd
         // Determine the permission code based on requested type
         const permission = type === PermissionType.Read ? roleCodes.readRequest : roleCodes.writeRequest;
 
-        await sendTransaction(connectedUniversity, studentWallet, studentWalletAddress, 'askForPermission', [permission]);
+        await sendTransaction(connectedUniversity, studentWallet, studentWalletAddress, 'askForPermission', [permission], AccountType.University);
     } catch (error) {
         logError('Failed to request permission:', error);
         throw new Error('Failed to request permission');
+    }
+}
+
+/**
+ * Registers a new employer in the academic blockchain system.
+ * Creates an employer smart account.
+ * @author Aslak Heimdal
+ * @param {Wallet} adminWallet - The admin wallet with registration permissions
+ * @param {string} employerPrivateKey - The employer's private key (0x-prefixed hex string)
+ * @param {EmployerData} employer - The employer information to register
+ * @returns {Promise<string>} The employer's smart account address
+ * @throws {Error} If admin wallet is missing, employer data is incomplete, or registration fails
+ */
+export async function registerEmployer(adminWallet: Wallet, employerPrivateKey: string, employer: EmployerData): Promise<string> {
+    try {
+        // Validate input parameters
+        if (!adminWallet) {
+            throw new Error('Admin wallet is required');
+        }
+
+        if (!employerPrivateKey) {
+            throw new Error('Employer private key is required');
+        }
+
+        if (!employer) {
+            throw new Error('Employer data is required');
+        }
+
+        if (!employer.companyName || !employer.country) {
+            throw new Error('Employer data is incomplete - company name and country are required');
+        }
+
+        // Create employer wallet from private key
+        const employerWallet = new Wallet(employerPrivateKey, provider);
+        const employerAddress = employerWallet.address;
+
+        // Get contract instance
+        const studentsRegister = getStudentsRegister();
+
+        // Connect admin wallet to provider
+        const connectedAdmin = adminWallet.connect(provider);
+
+        // Register the employer using the employer's EOA address
+        // Note: subscribeEmployer is marked onlyOwner, so it must be called directly from the owner EOA,
+        // not through account abstraction (which would change msg.sender to the smart account address)
+        const tx = await studentsRegister.connect(connectedAdmin).subscribeEmployer(
+            employerAddress,
+            employer.companyName,
+            employer.country,
+            employer.contactInfo || ''
+        );
+        
+        // Wait for transaction confirmation
+        await tx.wait();
+
+        // Get the employer's smart account address using the employer's wallet
+        const employerAccountAddress = await studentsRegister.connect(employerWallet).getEmployerAccount();
+
+        return employerAccountAddress;
+    } catch (error) {
+        logError('Failed to register employer:', error);
+        throw new Error('Failed to register employer');
+    }
+}
+
+/**
+ * Requests read-only access to a student's academic records for an employer.
+ * Employers must request access before they can view student records.
+ * @author Aslak Heimdal
+ * @param {Wallet} employerWallet - The employer wallet requesting permission
+ * @param {string} studentWalletAddress - The student's academic wallet address
+ * @returns {Promise<void>} Promise that resolves when the permission request is submitted and confirmed
+ * @throws {Error} If employer wallet is missing, student address is invalid, or permission request fails
+ */
+export async function requestEmployerAccess(employerWallet: Wallet, studentWalletAddress: string): Promise<void> {
+    try {
+        // Input validation
+        if (!employerWallet) {
+            throw new Error('Employer wallet is required');
+        }
+
+        if (!studentWalletAddress || !studentWalletAddress.startsWith('0x')) {
+            throw new Error('Valid student wallet address is required');
+        }
+
+        // Get student contract instance
+        const studentWallet = getStudentContract(studentWalletAddress);
+
+        // Connect employer wallet to provider
+        const connectedEmployer = employerWallet.connect(provider);
+
+        // Request employer read permission
+        await sendTransaction(connectedEmployer, studentWallet, studentWalletAddress, 'askForPermission', [roleCodes.employerReadRequest], AccountType.Employer);
+    } catch (error) {
+        logError('Failed to request employer access:', error);
+        throw new Error('Failed to request employer access');
+    }
+}
+
+/**
+ * Retrieves employer information from the blockchain.
+ * @author Aslak Heimdal
+ * @param {string} employerAccountAddress - The employer's smart account address
+ * @returns {Promise<Employer>} The employer's information
+ * @throws {Error} If employer address is invalid or data retrieval fails
+ */
+export async function getEmployerInfo(employerAccountAddress: string): Promise<Employer> {
+    try {
+        if (!employerAccountAddress || !employerAccountAddress.startsWith('0x')) {
+            throw new Error('Valid employer account address is required');
+        }
+
+        return await getEmployer(employerAccountAddress);
+    } catch (error) {
+        logError('Failed to retrieve employer information:', error);
+        throw new Error('Failed to retrieve employer information');
+    }
+}
+
+/**
+ * Retrieves student academic results for an employer (read-only, no personal information).
+ * @author Aslak Heimdal
+ * @param {Wallet} employerWallet - The employer wallet with read permissions
+ * @param {string} studentWalletAddress - The student's academic wallet address
+ * @returns {Promise<AcademicResult[]>} Array of academic results (without personal information)
+ * @throws {Error} If employer wallet is missing, student address is invalid, or data retrieval fails
+ */
+export async function getStudentResultsForEmployer(employerWallet: Wallet, studentWalletAddress: string): Promise<AcademicResult[]> {
+    try {
+        // Input validation
+        if (!employerWallet) {
+            throw new Error('Employer wallet is required');
+        }
+
+        if (!studentWalletAddress || !studentWalletAddress.startsWith('0x')) {
+            throw new Error('Valid student wallet address is required');
+        }
+
+        // Get student contract instance
+        const studentAccount = getStudentContract(studentWalletAddress);
+
+        // Connect employer wallet to provider
+        const connectedEmployer = employerWallet.connect(provider);
+
+        // Get employer's smart account address
+        const employerAccountAddress = await getEmployerAccountAddress(connectedEmployer);
+
+        // Fetch results through employer's smart account (read-only access)
+        const results = await executeSmartAccountViewCall(connectedEmployer, studentAccount, studentWalletAddress, 'getResultsForEmployer', [], AccountType.Employer);
+
+        // Process results (similar to generateStudent but without personal info)
+        // Get unique universities from results
+        const universityAddresses = new Set((results[0] as StudentContract.ResultStructOutput[]).map(r => r.university));
+        const universitiesMap = await getUniversities(universityAddresses);
+
+        const processedResults: AcademicResult[] = (results[0] as StudentContract.ResultStructOutput[]).map(result => {
+            const university = universitiesMap.get(result.university);
+            if (!university) {
+                throw new Error(`University not found for address: ${result.university}`);
+            }
+            
+            return {
+                code: result.code,
+                name: result.name,
+                degreeCourse: result.degreeCourse,
+                ects: Number(result.ects) / 100,
+                university: university,
+                grade: result.grade || undefined,
+                evaluationDate: result.date ? computeDate(result.date) : undefined,
+                certificate: result.certificateHash ? `${ipfsConfig.gatewayUrl}${result.certificateHash}` : undefined,
+            };
+        });
+
+        return processedResults;
+    } catch (error) {
+        logError('Failed to retrieve student results for employer:', error);
+        throw new Error('Failed to retrieve student results for employer');
+    }
+}
+
+/**
+ * Grants read-only permission to an employer for a student's academic records.
+ * @author Aslak Heimdal
+ * @param {Wallet} studentWallet - The student wallet (or university wallet acting on behalf of student)
+ * @param {string} studentWalletAddress - The student's academic wallet address
+ * @param {string} employerAddress - The employer's smart account address
+ * @returns {Promise<void>} Promise that resolves when the permission is granted
+ * @throws {Error} If student wallet is missing, addresses are invalid, or permission grant fails
+ */
+export async function grantEmployerPermission(studentWallet: Wallet, studentWalletAddress: string, employerAddress: string): Promise<void> {
+    try {
+        // Input validation
+        if (!studentWallet) {
+            throw new Error('Student wallet is required');
+        }
+
+        if (!studentWalletAddress || !studentWalletAddress.startsWith('0x')) {
+            throw new Error('Valid student wallet address is required');
+        }
+
+        if (!employerAddress || !employerAddress.startsWith('0x')) {
+            throw new Error('Valid employer address is required');
+        }
+
+        // Get student contract instance
+        const studentAccount = getStudentContract(studentWalletAddress);
+
+        // Connect student wallet to provider
+        const connectedStudent = studentWallet.connect(provider);
+
+        // Grant employer permission
+        await sendTransaction(connectedStudent, studentAccount, studentWalletAddress, 'grantEmployerPermission', [employerAddress], AccountType.Student);
+    } catch (error) {
+        logError('Failed to grant employer permission:', error);
+        throw new Error('Failed to grant employer permission');
+    }
+}
+
+/**
+ * Revokes permission from an employer to access a student's academic records.
+ * @author Aslak Heimdal
+ * @param {Wallet} studentWallet - The student wallet
+ * @param {string} studentWalletAddress - The student's academic wallet address
+ * @param {string} employerAddress - The employer's smart account address
+ * @returns {Promise<void>} Promise that resolves when the permission is revoked
+ * @throws {Error} If student wallet is missing, addresses are invalid, or permission revocation fails
+ */
+export async function revokeEmployerPermission(studentWallet: Wallet, studentWalletAddress: string, employerAddress: string): Promise<void> {
+    try {
+        // Input validation
+        if (!studentWallet) {
+            throw new Error('Student wallet is required');
+        }
+
+        if (!studentWalletAddress || !studentWalletAddress.startsWith('0x')) {
+            throw new Error('Valid student wallet address is required');
+        }
+
+        if (!employerAddress || !employerAddress.startsWith('0x')) {
+            throw new Error('Valid employer address is required');
+        }
+
+        // Get student contract instance
+        const studentAccount = getStudentContract(studentWalletAddress);
+
+        // Connect student wallet to provider
+        const connectedStudent = studentWallet.connect(provider);
+
+        // Revoke employer permission
+        await sendTransaction(connectedStudent, studentAccount, studentWalletAddress, 'revokeEmployerPermission', [employerAddress], AccountType.Student);
+    } catch (error) {
+        logError('Failed to revoke employer permission:', error);
+        throw new Error('Failed to revoke employer permission');
+    }
+}
+
+/**
+ * Retrieves all employer permissions for a student from the blockchain.
+ * @author Aslak Heimdal
+ * @param {Wallet} studentWallet - The student wallet
+ * @param {string} studentWalletAddress - The student's academic wallet address
+ * @param {boolean} requestsOnly - If true, returns only pending requests; if false, returns only granted permissions
+ * @returns {Promise<string[]>} Array of employer addresses with the specified permission status
+ * @throws {Error} If student wallet is missing, student address is invalid, or data retrieval fails
+ */
+export async function getEmployerPermissions(studentWallet: Wallet, studentWalletAddress: string, requestsOnly: boolean = false): Promise<string[]> {
+    try {
+        // Input validation
+        if (!studentWallet) {
+            throw new Error('Student wallet is required');
+        }
+
+        if (!studentWalletAddress || !studentWalletAddress.startsWith('0x')) {
+            throw new Error('Valid student wallet address is required');
+        }
+
+        // Get student contract instance
+        const studentAccount = getStudentContract(studentWalletAddress);
+
+        // Connect student wallet to provider
+        const connectedStudent = studentWallet.connect(provider);
+
+        // Determine permission type
+        const permissionType = requestsOnly ? roleCodes.employerReadRequest : roleCodes.employerRead;
+
+        // Fetch permissions
+        const [permissions] = await executeSmartAccountViewCall(connectedStudent, studentAccount, studentWalletAddress, 'getEmployerPermissions', [permissionType], AccountType.Student);
+
+        // permissions is already the address[] array from the decoded result
+        return permissions as string[];
+    } catch (error) {
+        logError('Failed to retrieve employer permissions:', error);
+        throw new Error('Failed to retrieve employer permissions');
+    }
+}
+
+/**
+ * Verifies an employer's permission level for a student's academic wallet.
+ * @author Aslak Heimdal
+ * @param {Wallet} employerWallet - The employer wallet to check permissions for
+ * @param {string} studentWalletAddress - The student's academic wallet address
+ * @returns {Promise<boolean>} True if employer has read permission, false otherwise
+ * @throws {Error} If employer wallet is missing, student address is invalid, or permission verification fails
+ */
+export async function verifyEmployerPermission(employerWallet: Wallet, studentWalletAddress: string): Promise<boolean> {
+    try {
+        // Input validation
+        if (!employerWallet) {
+            throw new Error('Employer wallet is required');
+        }
+
+        if (!studentWalletAddress || !studentWalletAddress.startsWith('0x')) {
+            throw new Error('Valid student wallet address is required');
+        }
+
+        // Get student contract instance
+        const studentWallet = getStudentContract(studentWalletAddress);
+
+        // Connect employer wallet to provider
+        const connectedEmployer = employerWallet.connect(provider);
+
+        // Check permission level on blockchain
+        const [permission] = await executeSmartAccountViewCall(connectedEmployer, studentWallet, studentWalletAddress, 'verifyPermission', [], AccountType.Employer);
+
+        // Check if permission is EMPLOYER_READ_ROLE
+        return permission === roleCodes.employerRead;
+    } catch (error) {
+        logError('Failed to verify employer permission:', error);
+        throw new Error('Failed to verify employer permission');
     }
 }
 
@@ -375,13 +704,15 @@ export async function verifyPermission(universityWallet: Wallet, studentWalletAd
         const connectedUniversity = universityWallet.connect(provider);
 
         // Check permission level on blockchain
-        const [permission] = await executeSmartAccountViewCall(connectedUniversity, studentWallet, studentWalletAddress, 'verifyPermission', []);
+        const [permission] = await executeSmartAccountViewCall(connectedUniversity, studentWallet, studentWalletAddress, 'verifyPermission', [], AccountType.University);
 
         // Map permission code to PermissionType enum
-        if (permission === roleCodes.read) {
-            return PermissionType.Read;
-        } else if (permission === roleCodes.write) {
+        // Note: Only check for university permissions (Read/Write), not employer permissions
+        // A university wallet should never have employer permissions
+        if (permission === roleCodes.write) {
             return PermissionType.Write;
+        } else if (permission === roleCodes.read) {
+            return PermissionType.Read;
         }
 
         // If no permission, return null

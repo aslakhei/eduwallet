@@ -1,6 +1,6 @@
 import figlet from 'figlet';
 import inquirer from 'inquirer';
-import { changeUniversity, deployStudentsRegister, enrollStudent, evaluateStudent, getStudentInfo, getStudentInfoResults, registerStudent, requestPermission, subscribeUniversity, uni, verifyPermission } from './interact';
+import { changeUniversity, deployStudentsRegister, enrollStudent, evaluateStudent, getStudentInfo, getStudentInfoResults, registerStudent, requestPermission, subscribeUniversity, subscribeEmployer, uni, verifyPermission } from './interact';
 import ora from 'ora';
 import eduwallet, { PermissionType } from 'eduwallet-sdk';
 import { Wallet } from 'ethers';
@@ -257,6 +257,53 @@ async function registerUniversityCommand(): Promise<void> {
         }
     } catch (error) {
         console.error('Failed to collect university information:', error);
+    }
+}
+
+/**
+ * Prompts for employer details and registers a new employer in the system.
+ * Collects and validates company information required for employer registration.
+ * @author Aslak Heimdal
+ * @returns {Promise<void>} Promise that resolves when the employer is successfully subscribed or fails
+ */
+async function registerEmployerCommand(): Promise<void> {
+    try {
+        const answers = await inquirer.prompt([
+            {
+                type: 'input',
+                name: 'companyName',
+                message: 'Enter the company name:',
+                validate: validateLongString,
+            },
+            {
+                type: 'input',
+                name: 'country',
+                message: 'Enter the company country:',
+                validate: validateString,
+            },
+            {
+                type: 'input',
+                name: 'contactInfo',
+                message: 'Enter contact information (optional):',
+                validate: (input: string) => {
+                    // Contact info is optional, so empty string is valid
+                    if (input.length === 0) {
+                        return true;
+                    }
+                    return validateLongString(input);
+                },
+            },
+        ]);
+        const spinner = ora('Subscribing the employer...').start();
+        try {
+            await subscribeEmployer(answers.companyName, answers.country, answers.contactInfo || "");
+            spinner.succeed('Employer subscribed successfully!');
+        } catch (error) {
+            spinner.fail(`Failed to subscribe the employer. Try again.`);
+            //console.error('Employer subscription error details:', error);
+        }
+    } catch (error) {
+        console.error('Failed to collect employer information:', error);
     }
 }
 
@@ -686,6 +733,7 @@ async function mainMenu(): Promise<void> {
                 // Limited menu when no university wallet is configured
                 choices = [
                     'Register a university',
+                    'Register an employer',
                     'Exit'
                 ];
             }
@@ -703,6 +751,9 @@ async function mainMenu(): Promise<void> {
             switch (action.action) {
                 case 'Register a university':
                     await registerUniversityCommand();
+                    break;
+                case 'Register an employer':
+                    await registerEmployerCommand();
                     break;
                 case 'Register a student':
                     await registerStudentCommand();

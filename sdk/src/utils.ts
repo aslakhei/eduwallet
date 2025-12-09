@@ -1,10 +1,11 @@
-import type { Student as StudentInterface, University as UniversityInterface, AcademicResult, StudentEthWalletInfo } from "./types";
+import type { Student as StudentInterface, University as UniversityInterface, Employer as EmployerInterface, AcademicResult, StudentEthWalletInfo } from "./types";
 import { blockchainConfig, DEBUG, ipfsConfig, logError, provider, s3Client } from "./conf";
 import type { StudentsRegister } from '@typechain/contracts/StudentsRegister';
 import { StudentsRegister__factory } from "@typechain/factories/contracts/StudentsRegister__factory"
 import type { Student } from '@typechain/contracts/Student';
 import { Student__factory } from '@typechain/factories/contracts/Student__factory';
 import { University__factory } from '@typechain/factories/contracts/University__factory';
+import { Employer__factory } from '@typechain/factories/contracts/Employer__factory';
 import { PutObjectCommand } from '@aws-sdk/client-s3';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc.js';
@@ -15,6 +16,7 @@ import type { BaseContract, Result } from 'ethers';
 import { EntryPoint__factory } from '@typechain/factories/@account-abstraction/contracts/core/EntryPoint__factory';
 import type { EntryPoint } from '@typechain/@account-abstraction/contracts/core/EntryPoint';
 import type { University } from '@typechain/contracts/University';
+import type { Employer } from '@typechain/contracts/Employer';
 import { AccountAbstraction } from "./AccountAbstraction";
 
 
@@ -26,8 +28,8 @@ import { AccountAbstraction } from "./AccountAbstraction";
  */
 export function createStudentWallet(): StudentEthWalletInfo {
     try {
-        const studentId = generateRandomString(10);
-        const randomString = generateRandomString(16);
+        const studentId = generateRandomString(4);
+        const randomString = generateRandomString(4);
         const privateKey = derivePrivateKey(randomString, studentId);
         const wallet = new Wallet(privateKey);
         return {
@@ -157,6 +159,42 @@ export function getUniversitySmartAccount(contractAddress: string): University {
     } catch (error) {
         logError('Failed to get University contract:', error);
         throw new Error('Failed to connect to University contract: ' + (error instanceof Error ? error.message : String(error)));
+    }
+}
+
+/**
+ * Gets a connected instance of an Employer contract for interaction.
+ * Used to interact with an employer's smart account.
+ * @author Aslak Heimdal
+ * @param {string} contractAddress - Employer smart account address
+ * @returns {Employer} Connected employer contract instance
+ * @throws {Error} If connection to the contract fails
+ */
+export function getEmployerSmartAccount(contractAddress: string): Employer {
+    try {
+        return Employer__factory.connect(contractAddress, provider);
+    } catch (error) {
+        logError('Failed to get Employer contract:', error);
+        throw new Error('Failed to connect to Employer contract: ' + (error instanceof Error ? error.message : String(error)));
+    }
+}
+
+/**
+ * Gets the smart account address associated with an employer's EOA wallet.
+ * Retrieves the employer's smart contract account address from the registry.
+ * @author Aslak Heimdal
+ * @param {Wallet} employerEthWallet - Employer's Ethereum wallet
+ * @returns {Promise<string>} Employer's smart account contract address
+ * @throws {Error} If retrieval of the smart account address fails
+ */
+export async function getEmployerAccountAddress(employerEthWallet: Wallet): Promise<string> {
+    try {
+        const studentsRegister = getStudentsRegister();
+        const employerAccountAddress = await studentsRegister.connect(employerEthWallet).getEmployerAccount();
+        return employerAccountAddress;
+    } catch (error) {
+        logError('Failed to get Employer smart account address:', error);
+        throw new Error('Failed to retrieve Employer smart account address: ' + (error instanceof Error ? error.message : String(error)));
     }
 }
 
@@ -308,7 +346,7 @@ function generateResult(result: Student.ResultStructOutput, university: Universi
  * @param {Set<string>} universitiesAddresses - Set of university blockchain addresses
  * @returns {Promise<Map<string, University>>} Map of university addresses to university details
  */
-async function getUniversities(universitiesAddresses: Set<string>): Promise<Map<string, UniversityInterface>> {
+export async function getUniversities(universitiesAddresses: Set<string>): Promise<Map<string, UniversityInterface>> {
     if (universitiesAddresses.size === 0) {
         return new Map<string, UniversityInterface>();
     }
@@ -392,27 +430,103 @@ async function getUniversity(universityAccountAddress: string): Promise<Universi
 }
 
 /**
- * Sends a transaction through a university's smart account using account abstraction.
+ * Retrieves detailed information about a specific employer.
+ * Connects to the employer's smart contract and fetches its public information.
+ * @author Aslak Heimdal
+ * @param {string} employerAccountAddress - Employer smart contract address
+ * @returns {Promise<EmployerInterface>} Employer details including company name and location
+ * @throws {Error} If employer information cannot be retrieved
+ */
+export async function getEmployer(employerAccountAddress: string): Promise<EmployerInterface> {
+    try {
+        // Connect to employer contract
+        const contract = Employer__factory.connect(employerAccountAddress, provider);
+
+        // Fetch employer information
+        const {
+            companyName,
+            country,
+            contactInfo
+        } = await contract.getEmployerInfo();
+
+        // Return formatted employer object
+        return {
+            companyName,
+            country,
+            contactInfo: contactInfo || undefined,
+        };
+    } catch (error) {
+        logError(`Failed to get employer at address ${employerAccountAddress}:`, error);
+        throw new Error('Failed to retrieve employer details: ' + (error instanceof Error ? error.message : String(error)));
+    }
+}
+
+/**
+ * Account type enum for determining which smart account address retrieval function to use.
+ */
+export enum AccountType {
+    University = "university",
+    Employer = "employer",
+    Student = "student",
+}
+
+/**
+ * Sends a transaction through a smart account using account abstraction.
  * Creates and executes a user operation that calls a specific function on a target contract.
- * @author Diego Da Giau
- * @param {Wallet} universityEthWallet - University's Ethereum wallet (EOA)
+ * @author Diego Da Giau, Aslak Heimdal
+ * @param {Wallet} ethWallet - Ethereum wallet (EOA) - can be university, employer, or student wallet
  * @param {BaseContract} targetContract - Contract instance to interact with
  * @param {string} targetContractAddress - Address of the target contract
  * @param {string} functionName - Name of the function to call
  * @param {any[]} params - Parameters to pass to the function
+ * @param {AccountType} [accountType] - Optional account type. If not provided, will try to auto-detect (tries university first, then employer, then student)
  * @returns {Promise<void>}
  * @throws {Error} If transaction execution fails
  */
-export async function sendTransaction(universityEthWallet: Wallet, targetContract: BaseContract, targetContractAddress: string, functionName: string, params: any[]): Promise<void> {
+export async function sendTransaction(ethWallet: Wallet, targetContract: BaseContract, targetContractAddress: string, functionName: string, params: any[], accountType?: AccountType): Promise<void> {
     try {
-        const connectedUniversity = universityEthWallet.connect(provider);
+        const connectedWallet = ethWallet.connect(provider);
 
-        const smartAccountAddress = await getUniversityAccountAddress(connectedUniversity);
+        // Get smart account address based on account type
+        let smartAccountAddress: string;
+        if (accountType) {
+            // Use specified account type
+            switch (accountType) {
+                case AccountType.University:
+                    smartAccountAddress = await getUniversityAccountAddress(connectedWallet);
+                    break;
+                case AccountType.Employer:
+                    smartAccountAddress = await getEmployerAccountAddress(connectedWallet);
+                    break;
+                case AccountType.Student:
+                    const studentsRegister = getStudentsRegister();
+                    smartAccountAddress = await studentsRegister.connect(connectedWallet).getStudentAccount();
+                    break;
+                default:
+                    throw new Error(`Unknown account type: ${accountType}`);
+            }
+        } else {
+            // Auto-detect account type by trying each in order
+            try {
+                smartAccountAddress = await getUniversityAccountAddress(connectedWallet);
+            } catch (universityError) {
+                try {
+                    smartAccountAddress = await getEmployerAccountAddress(connectedWallet);
+                } catch (employerError) {
+                    try {
+                        const studentsRegister = getStudentsRegister();
+                        smartAccountAddress = await studentsRegister.connect(connectedWallet).getStudentAccount();
+                    } catch (studentError) {
+                        throw new Error('Could not determine account type. Please specify accountType parameter.');
+                    }
+                }
+            }
+        }
 
         // Initialize account abstraction manager
         const accountAbstraction = new AccountAbstraction(
             provider,
-            universityEthWallet
+            ethWallet
         );
 
         // Create contract interface for test contract
@@ -429,7 +543,7 @@ export async function sendTransaction(universityEthWallet: Wallet, targetContrac
         });
 
         // Execute the operation
-        const tx = await accountAbstraction.executeUserOps([userOp], connectedUniversity.address);
+        const tx = await accountAbstraction.executeUserOps([userOp], connectedWallet.address);
         const receipt = await tx.wait();
         if (receipt) {
             accountAbstraction.verifyTransaction(receipt, targetContract);
@@ -441,30 +555,71 @@ export async function sendTransaction(universityEthWallet: Wallet, targetContrac
 }
 
 /**
- * Executes a view (read-only) function call through a university's smart account.
+ * Executes a view (read-only) function call through a smart account.
  * This allows read operations that respect access control rules in the smart contracts.
- * @author Diego Da Giau
- * @param {Wallet} universityEthWallet - University's Ethereum wallet (EOA)
+ * @author Diego Da Giau, Aslak Heimdal
+ * @param {Wallet} ethWallet - Ethereum wallet (EOA) - can be university, employer, or student wallet
  * @param {BaseContract} targetContract - Contract instance to interact with
  * @param {string} targetContractAddress - Address of the target contract
  * @param {string} functionName - Name of the view function to call
  * @param {any[]} params - Parameters to pass to the function
+ * @param {AccountType} [accountType] - Optional account type. If not provided, will try to auto-detect (tries university first, then employer, then student)
  * @returns {Promise<Result>} Decoded results from the function call
  * @throws {Error} If the view call fails
  */
-export async function executeSmartAccountViewCall(universityEthWallet: Wallet, targetContract: BaseContract, targetContractAddress: string, functionName: string, params: any[]): Promise<Result> {
+export async function executeSmartAccountViewCall(ethWallet: Wallet, targetContract: BaseContract, targetContractAddress: string, functionName: string, params: any[], accountType?: AccountType): Promise<Result> {
     try {
-        const connectedUniversity = universityEthWallet.connect(provider);
+        const connectedWallet = ethWallet.connect(provider);
 
-        // Create a contract instance for the smart account
-        const smartAccountAddress = await getUniversityAccountAddress(connectedUniversity);
-        const smartAccount = getUniversitySmartAccount(smartAccountAddress);
+        // Get smart account address based on account type
+        let smartAccountAddress: string;
+        let smartAccount: University | Employer | Student;
+        
+        if (accountType) {
+            // Use specified account type
+            switch (accountType) {
+                case AccountType.University:
+                    smartAccountAddress = await getUniversityAccountAddress(connectedWallet);
+                    smartAccount = getUniversitySmartAccount(smartAccountAddress);
+                    break;
+                case AccountType.Employer:
+                    smartAccountAddress = await getEmployerAccountAddress(connectedWallet);
+                    smartAccount = getEmployerSmartAccount(smartAccountAddress);
+                    break;
+                case AccountType.Student:
+                    const studentsRegister = getStudentsRegister();
+                    smartAccountAddress = await studentsRegister.connect(connectedWallet).getStudentAccount();
+                    smartAccount = getStudentContract(smartAccountAddress);
+                    break;
+                default:
+                    throw new Error(`Unknown account type: ${accountType}`);
+            }
+        } else {
+            // Auto-detect account type by trying each in order
+            try {
+                smartAccountAddress = await getUniversityAccountAddress(connectedWallet);
+                smartAccount = getUniversitySmartAccount(smartAccountAddress);
+            } catch (universityError) {
+                try {
+                    smartAccountAddress = await getEmployerAccountAddress(connectedWallet);
+                    smartAccount = getEmployerSmartAccount(smartAccountAddress);
+                } catch (employerError) {
+                    try {
+                        const studentsRegister = getStudentsRegister();
+                        smartAccountAddress = await studentsRegister.connect(connectedWallet).getStudentAccount();
+                        smartAccount = getStudentContract(smartAccountAddress);
+                    } catch (studentError) {
+                        throw new Error('Could not determine account type. Please specify accountType parameter.');
+                    }
+                }
+            }
+        }
 
         // Encode the function call
         const calldata = targetContract.interface.encodeFunctionData(functionName, params);
 
         // Execute the view call through the smart account
-        const results = await smartAccount.connect(connectedUniversity).executeViewCall(targetContractAddress, calldata);
+        const results = await smartAccount.connect(connectedWallet).executeViewCall(targetContractAddress, calldata);
 
         // Decode the result
         const decodedResults = targetContract.interface.decodeFunctionResult(functionName, results);

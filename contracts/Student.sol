@@ -20,10 +20,12 @@ contract Student is SmartAccount, AccessControlEnumerable {
     // Role definitions for access control
     bytes32 private constant READER_ROLE = keccak256("READER_ROLE");
     bytes32 private constant WRITER_ROLE = keccak256("WRITER_ROLE");
+    bytes32 private constant EMPLOYER_READ_ROLE = keccak256("EMPLOYER_READ_ROLE");
 
     // Role definition for access requests control
     bytes32 private constant READER_APPLICANT = keccak256("READER_APPLICANT");
     bytes32 private constant WRITER_APPLICANT = keccak256("WRITER_APPLICANT");
+    bytes32 private constant EMPLOYER_READ_APPLICANT = keccak256("EMPLOYER_READ_APPLICANT");
 
     /**
      * @dev Represents enrollment information for a course
@@ -155,15 +157,32 @@ contract Student is SmartAccount, AccessControlEnumerable {
 
     /**
      * @notice Gets all academic results
-     * @dev Only accessible by addresses with READER_ROLE or WRITER_ROLE
+     * @dev Only accessible by addresses with READER_ROLE, WRITER_ROLE, or EMPLOYER_READ_ROLE
      * @return Array of academic results
      */
     function getResults() external view returns (Result[] memory) {
         // Access control
         require(
             hasRole(READER_ROLE, _msgSender()) ||
-                hasRole(WRITER_ROLE, _msgSender()),
+                hasRole(WRITER_ROLE, _msgSender()) ||
+                hasRole(EMPLOYER_READ_ROLE, _msgSender()),
             AccessControlUnauthorizedAccount(_msgSender(), READER_ROLE)
+        );
+
+        return studentInfo.results;
+    }
+
+    /**
+     * @notice Gets all academic results for employers (read-only access)
+     * @dev Only accessible by addresses with EMPLOYER_READ_ROLE
+     *      Returns only academic results, no personal information
+     * @return Array of academic results (without personal data)
+     */
+    function getResultsForEmployer() external view returns (Result[] memory) {
+        // Access control - only employers
+        require(
+            hasRole(EMPLOYER_READ_ROLE, _msgSender()),
+            AccessControlUnauthorizedAccount(_msgSender(), EMPLOYER_READ_ROLE)
         );
 
         return studentInfo.results;
@@ -222,19 +241,38 @@ contract Student is SmartAccount, AccessControlEnumerable {
     }
 
     /**
-     * @notice Allows a university to request permission to access student data
+     * @notice Allows a university or employer to request permission to access student data
      * @dev University addresses will be added to READER_APPLICANT or WRITER_APPLICANT roles
-     * @param _permissionType Permission type requested (READER_APPLICANT or WRITER_APPLICANT)
+     *      Employer addresses will be added to EMPLOYER_READ_APPLICANT role
+     * @param _permissionType Permission type requested (READER_APPLICANT, WRITER_APPLICANT, or EMPLOYER_READ_APPLICANT)
      */
     function askForPermission(bytes32 _permissionType) external {
         // Validate permission type
         if (
             _permissionType != READER_APPLICANT &&
-            _permissionType != WRITER_APPLICANT
+            _permissionType != WRITER_APPLICANT &&
+            _permissionType != EMPLOYER_READ_APPLICANT
         ) {
             revert WrongRole();
         }
 
+        // Handle employer applicant role separately
+        if (_permissionType == EMPLOYER_READ_APPLICANT) {
+            // Check if already has employer permission
+            if (hasRole(EMPLOYER_READ_ROLE, _msgSender())) {
+                revert PermissionAlreadyGiven();
+            }
+            // Check if already applied
+            if (hasRole(EMPLOYER_READ_APPLICANT, _msgSender())) {
+                // Already applied, nothing to do
+                return;
+            }
+            // Grant the employer applicant role
+            _grantRole(EMPLOYER_READ_APPLICANT, _msgSender());
+            return;
+        }
+
+        // Handle university applicant roles
         // Check if already has the same or higher permission
         if (
             (_permissionType == READER_APPLICANT &&
@@ -305,6 +343,23 @@ contract Student is SmartAccount, AccessControlEnumerable {
     }
 
     /**
+     * @notice Grants read-only permission to an employer
+     * @dev Only callable by the student (DEFAULT_ADMIN_ROLE)
+     * @param _employer Address of employer to grant permission to
+     */
+    function grantEmployerPermission(
+        address _employer
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        // Grant the employer read permission
+        grantRole(EMPLOYER_READ_ROLE, _employer);
+
+        // Remove the employer from the applicants list if present
+        if (hasRole(EMPLOYER_READ_APPLICANT, _employer)) {
+            revokeRole(EMPLOYER_READ_APPLICANT, _employer);
+        }
+    }
+
+    /**
      * @notice Revokes all permissions from a university
      * @dev Only callable by the student (DEFAULT_ADMIN_ROLE)
      * @param _university Address of university to revoke permissions from
@@ -320,9 +375,22 @@ contract Student is SmartAccount, AccessControlEnumerable {
     }
 
     /**
+     * @notice Revokes permission from an employer
+     * @dev Only callable by the student (DEFAULT_ADMIN_ROLE)
+     * @param _employer Address of employer to revoke permissions from
+     */
+    function revokeEmployerPermission(
+        address _employer
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (hasRole(EMPLOYER_READ_ROLE, _employer)) {
+            revokeRole(EMPLOYER_READ_ROLE, _employer);
+        }
+    }
+
+    /**
      * @notice Lists all universities with a specific permission type
      * @dev Only callable by the student (DEFAULT_ADMIN_ROLE)
-     * @param _permissionType Permission type to query (READER_ROLE or WRITER_ROLE)
+     * @param _permissionType Permission type to query (READER_ROLE, WRITER_ROLE, READER_APPLICANT, or WRITER_APPLICANT)
      * @return Array of university addresses with specified permission
      */
     function getPermissions(
@@ -340,9 +408,28 @@ contract Student is SmartAccount, AccessControlEnumerable {
     }
 
     /**
+     * @notice Lists all employers with a specific permission type
+     * @dev Only callable by the student (DEFAULT_ADMIN_ROLE)
+     * @param _permissionType Permission type to query (EMPLOYER_READ_ROLE or EMPLOYER_READ_APPLICANT)
+     * @return Array of employer addresses with specified permission
+     */
+    function getEmployerPermissions(
+        bytes32 _permissionType
+    ) external view onlyRole(DEFAULT_ADMIN_ROLE) returns (address[] memory) {
+        // Check if the permission exists
+        require(
+            _permissionType == EMPLOYER_READ_ROLE ||
+                _permissionType == EMPLOYER_READ_APPLICANT,
+            WrongRole()
+        );
+        return getRoleMembers(_permissionType);
+    }
+
+    /**
      * @notice Verifies the caller's highest permission level for this student wallet
      * @dev Returns the highest permission role the caller has, with WRITER_ROLE taking precedence over READER_ROLE
-     * @return bytes32 The highest permission role (WRITER_ROLE, READER_ROLE, or bytes32(0) if no permission)
+     *      Employers have separate EMPLOYER_READ_ROLE
+     * @return bytes32 The highest permission role (WRITER_ROLE, READER_ROLE, EMPLOYER_READ_ROLE, or bytes32(0) if no permission)
      */
     function verifyPermission() external view returns (bytes32) {
         // Check for write permission first (highest privilege)
@@ -352,6 +439,10 @@ contract Student is SmartAccount, AccessControlEnumerable {
         // Then check for read permission
         if (hasRole(READER_ROLE, _msgSender())) {
             return READER_ROLE;
+        }
+        // Then check for employer read permission
+        if (hasRole(EMPLOYER_READ_ROLE, _msgSender())) {
+            return EMPLOYER_READ_ROLE;
         }
         // Return bytes32(0) if no permission
         return bytes32(0);

@@ -1,9 +1,12 @@
 import { JsonRpcProvider, Wallet, NonceManager, parseEther } from 'ethers';
 import { randomBytes, pbkdf2Sync } from 'node:crypto';
-import type { Paymaster, StudentDeployer, StudentsRegister, UniversityDeployer } from '@typechain/contracts';
+import { writeFileSync } from 'node:fs';
+import { join, basename, resolve } from 'node:path';
+import type { Paymaster, StudentDeployer, StudentsRegister, UniversityDeployer, EmployerDeployer } from '@typechain/contracts';
 import { StudentsRegister__factory } from "@typechain/factories/contracts/StudentsRegister__factory"
 import { StudentDeployer__factory } from '@typechain/factories/contracts/StudentDeployer__factory';
 import { UniversityDeployer__factory } from '@typechain/factories/contracts/UniversityDeployer__factory';
+import { EmployerDeployer__factory } from '@typechain/factories/contracts/EmployerDeployer__factory';
 import { EntryPoint__factory } from '@typechain/factories/@account-abstraction/contracts/core/EntryPoint__factory';
 import { Paymaster__factory } from '@typechain/factories/contracts/Paymaster__factory';
 import type { EntryPoint } from '@typechain/@account-abstraction/contracts/core/EntryPoint';
@@ -27,6 +30,7 @@ const deployer = getDeployer();
 let entryP: EntryPoint | undefined;        // EntryPoint contract for account abstraction
 let studentsRegister: StudentsRegister | undefined;  // Main registry contract 
 export let uni: Wallet | undefined;        // Active university wallet
+export let employer: Wallet | undefined;    // Active employer wallet
 
 /**
  * Retrieves the deployer wallet using the private key from environment variables.
@@ -55,8 +59,8 @@ function getDeployer(): Wallet {
 /**
  * Deploys the complete contract infrastructure for the EduWallet system:
  * 1. EntryPoint - Core account abstraction component
- * 2. StudentDeployer & UniversityDeployer - Factory contracts for creating user accounts
- * 3. StudentsRegister - Main registry that tracks all universities and students
+ * 2. StudentDeployer, UniversityDeployer & EmployerDeployer - Factory contracts for creating user accounts
+ * 3. StudentsRegister - Main registry that tracks all universities, students, and employers
  * 4. Paymaster - Handles gas fee sponsorship for users
  * All contracts are deployed in parallel where possible to optimize deployment time.
  * @returns {Promise<void>} Promise that resolves when all contracts are successfully deployed
@@ -68,7 +72,7 @@ export async function deployStudentsRegister(): Promise<void> {
         const managedDeployer = new NonceManager(deployer);
 
         // Deploy core contracts in parallel
-        const [entryPoint, studentDeployer, universityDeployer] = await deployInfrastructureContracts(managedDeployer);
+        const [entryPoint, studentDeployer, universityDeployer, employerDeployer] = await deployInfrastructureContracts(managedDeployer);
 
         // Store EntryPoint reference globally for later use
         entryP = entryPoint;
@@ -78,20 +82,58 @@ export async function deployStudentsRegister(): Promise<void> {
             managedDeployer,
             entryPoint,
             studentDeployer,
-            universityDeployer
+            universityDeployer,
+            employerDeployer
         );
 
         // Fund the paymaster with ETH to cover user operations
         await fundPaymaster(entryPoint, paymaster);
 
+        // Get all contract addresses
+        const [
+            entryPointAddress,
+            studentDeployerAddress,
+            universityDeployerAddress,
+            employerDeployerAddress,
+            paymasterAddress,
+            studentsRegisterAddress
+        ] = await Promise.all([
+            entryPoint.getAddress(),
+            studentDeployer.getAddress(),
+            universityDeployer.getAddress(),
+            employerDeployer.getAddress(),
+            paymaster.getAddress(),
+            register.getAddress()
+        ]);
+
+        // Save deployment addresses to a JSON file for SDK to read
+        // Write to project root (go up one level from cli directory if we're in it)
+        // The npm script runs with "cd cli &&", so process.cwd() will be the cli directory
+        const cwd = process.cwd();
+        const dirName = basename(cwd);
+        const deploymentsPath = dirName === 'cli'
+            ? resolve(cwd, '..', 'deployments.json')
+            : join(cwd, 'deployments.json');
+        const deployments = {
+            chainId: "31337",
+            url: process.env.RPC_URL || "http://localhost:8545",
+            registerAddress: studentsRegisterAddress,
+            entryPointAddress: entryPointAddress,
+            paymasterAddress: paymasterAddress,
+            studentFactoryAddress: studentDeployerAddress,
+        };
+        writeFileSync(deploymentsPath, JSON.stringify(deployments, null, 2));
+        console.log(`\nDeployment addresses saved to: ${deploymentsPath}\n`);
+
         // Log deployment information if verbose mode is enabled
         if (VERBOSE) {
             logDeploymentAddresses(
-                await entryPoint.getAddress(),
-                await studentDeployer.getAddress(),
-                await universityDeployer.getAddress(),
-                await paymaster.getAddress(),
-                await register.getAddress()
+                entryPointAddress,
+                studentDeployerAddress,
+                universityDeployerAddress,
+                employerDeployerAddress,
+                paymasterAddress,
+                studentsRegisterAddress
             );
         }
 
@@ -107,10 +149,11 @@ export async function deployStudentsRegister(): Promise<void> {
  * - EntryPoint: Core contract that processes user operations without requiring gas
  * - StudentDeployer: Factory that creates deterministic student smart accounts
  * - UniversityDeployer: Factory that creates university smart accounts
+ * - EmployerDeployer: Factory that creates employer smart accounts
  * @param deployer - NonceManager instance that handles transaction ordering
- * @returns {Promise<[EntryPoint, StudentDeployer, UniversityDeployer]>} Triple of deployed contract instances
+ * @returns {Promise<[EntryPoint, StudentDeployer, UniversityDeployer, EmployerDeployer]>} Quadruple of deployed contract instances
  */
-async function deployInfrastructureContracts(deployer: NonceManager): Promise<[EntryPoint, StudentDeployer, UniversityDeployer]> {
+async function deployInfrastructureContracts(deployer: NonceManager): Promise<[EntryPoint, StudentDeployer, UniversityDeployer, EmployerDeployer]> {
     // Deploy EntryPoint contract using TypeChain factory
     const entryPointFactory = new EntryPoint__factory(deployer);
     const entryPoint = await entryPointFactory.deploy();
@@ -123,43 +166,51 @@ async function deployInfrastructureContracts(deployer: NonceManager): Promise<[E
     const universityDeployerFactory = new UniversityDeployer__factory(deployer);
     const universityDeployer = await universityDeployerFactory.deploy();
 
+    // Deploy EmployerDeployer contract using TypeChain factory
+    const employerDeployerFactory = new EmployerDeployer__factory(deployer);
+    const employerDeployer = await employerDeployerFactory.deploy();
+
     // Wait for deployments to be mined
     await Promise.all([
         entryPoint.waitForDeployment(),
         studentDeployer.waitForDeployment(),
-        universityDeployer.waitForDeployment()
+        universityDeployer.waitForDeployment(),
+        employerDeployer.waitForDeployment()
     ]);
 
-    return [entryPoint, studentDeployer, universityDeployer];
+    return [entryPoint, studentDeployer, universityDeployer, employerDeployer];
 }
 
 /**
  * Deploys the application-specific contracts for the EduWallet system:
- * - StudentsRegister: Central registry that manages university and student accounts
+ * - StudentsRegister: Central registry that manages university, student, and employer accounts
  * - Paymaster: Contract that sponsors gas fees for users of the system
  * @param deployer - NonceManager instance that handles transaction ordering
  * @param entryPoint - Deployed EntryPoint contract instance
  * @param studentDeployer - Deployed StudentDeployer contract instance
  * @param universityDeployer - Deployed UniversityDeployer contract instance
+ * @param employerDeployer - Deployed EmployerDeployer contract instance
  * @returns {Promise<[StudentsRegister, Paymaster]>} Pair of deployed contract instances
  */
 async function deployApplicationContracts(
     deployer: NonceManager,
     entryPoint: EntryPoint,
     studentDeployer: any,
-    universityDeployer: any
+    universityDeployer: any,
+    employerDeployer: any
 ): Promise<[StudentsRegister, Paymaster]> {
     // Get deployed contract addresses
-    const [entryPointAddress, studentDeployerAddress, universityDeployerAddress] =
+    const [entryPointAddress, studentDeployerAddress, universityDeployerAddress, employerDeployerAddress] =
         await Promise.all([
             entryPoint.getAddress(),
             studentDeployer.getAddress(),
-            universityDeployer.getAddress()
+            universityDeployer.getAddress(),
+            employerDeployer.getAddress()
         ]);
 
     // Deploy StudentsRegister contract using TypeChain factory
     const studentsRegisterFactory = new StudentsRegister__factory(deployer);
-    const register = await studentsRegisterFactory.deploy(studentDeployerAddress, universityDeployerAddress, entryPoint);
+    const register = await studentsRegisterFactory.deploy(studentDeployerAddress, universityDeployerAddress, employerDeployerAddress, entryPointAddress);
 
     // Deploy Paymaster contract using TypeChain factory
     const paymasterFactory = new Paymaster__factory(deployer);
@@ -197,6 +248,7 @@ async function fundPaymaster(entryPoint: EntryPoint, paymaster: any): Promise<vo
  * @param entryPointAddress - Address of the EntryPoint contract
  * @param studentDeployerAddress - Address of the StudentDeployer contract
  * @param universityDeployerAddress - Address of the UniversityDeployer contract
+ * @param employerDeployerAddress - Address of the EmployerDeployer contract
  * @param paymasterAddress - Address of the Paymaster contract
  * @param studentsRegisterAddress - Address of the StudentsRegister contract
  */
@@ -204,6 +256,7 @@ function logDeploymentAddresses(
     entryPointAddress: string,
     studentDeployerAddress: string,
     universityDeployerAddress: string,
+    employerDeployerAddress: string,
     paymasterAddress: string,
     studentsRegisterAddress: string
 ): void {
@@ -216,6 +269,9 @@ function logDeploymentAddresses(
     console.log(`---------------------------------------------------`);
     console.log(`UNIVERSITY DEPLOYER:`);
     console.log(`Address: ${universityDeployerAddress}`);
+    console.log(`---------------------------------------------------`);
+    console.log(`EMPLOYER DEPLOYER:`);
+    console.log(`Address: ${employerDeployerAddress}`);
     console.log(`---------------------------------------------------`);
     console.log(`PAYMASTER:`);
     console.log(`Address: ${paymasterAddress}`);
@@ -243,6 +299,35 @@ function getUniversityWallet(): Wallet {
         console.log(`\n---------------------------------------------------`);
         console.log(`UNIVERSITY:`);
         console.log(`Private key: ${universityPrivateKey}`);
+        if (VERBOSE) {
+            console.log(`Address: ${wallet.address}`)
+        }
+        console.log(`---------------------------------------------------\n`);
+
+        return wallet;
+    } catch (error) {
+        throw new Error(`${error}`);
+    }
+}
+
+/**
+ * Creates a new employer wallet.
+ * Generates a random private key and connects the wallet with the provider.
+ * @author Aslak Heimdal
+ * @returns {Wallet} The employer wallet connected to the system provider
+ * @throws {Error} If wallet creation fails, with the error message from the underlying error
+ */
+function getEmployerWallet(): Wallet {
+    try {
+        // Generate a random private key for the employer
+        const privateKey = randomBytes(32).toString('hex');
+        const employerPrivateKey = `0x${privateKey}`;
+        const wallet = new Wallet(employerPrivateKey, PROVIDER);
+
+        // Display employer credentials
+        console.log(`\n---------------------------------------------------`);
+        console.log(`EMPLOYER:`);
+        console.log(`Private key: ${employerPrivateKey}`);
         if (VERBOSE) {
             console.log(`Address: ${wallet.address}`)
         }
@@ -295,6 +380,58 @@ export async function subscribeUniversity(name: string, country: string, shortNa
         // Wait for the transactions to be confirmed
         await Promise.all([
             universityTx.wait(),
+            fundTx.wait()
+        ]);
+    } catch (error) {
+        throw new Error(`${error}`);
+    }
+}
+
+/**
+ * Registers a new employer in the academic blockchain system.
+ * Creates an employer wallet, funds it, and subscribes it to the system.
+ * @author Aslak Heimdal
+ * @param {string} companyName - The employer's company name
+ * @param {string} country - The employer's country
+ * @param {string} contactInfo - Optional contact information
+ * @returns {Promise<void>} Promise that resolves when the employer is successfully subscribed
+ * @throws {Error} If the students register contract is not deployed or if any part of the subscription process fails, with the error message from the underlying error
+ */
+export async function subscribeEmployer(companyName: string, country: string, contactInfo: string = ""): Promise<void> {
+    if (!studentsRegister) {
+        throw new Error("Students register not deployed - run deployStudentsRegister first");
+    }
+
+    if (!entryP) {
+        throw new Error("Entry point not deployed - run deployStudentsRegister first");
+    }
+
+    try {
+        // Store the employer wallet for future operations
+        employer = getEmployerWallet();
+
+        if (!employer) {
+            throw new Error("Failed to create employer wallet");
+        }
+
+        const managedDeployer = new NonceManager(deployer);
+
+        const fundTx = await managedDeployer.sendTransaction({
+            to: employer.address,
+            value: parseEther('10000'),
+        });
+
+        // Subscribe the employer to the register
+        const employerTx = await studentsRegister.connect(managedDeployer).subscribeEmployer(
+            employer.address,
+            companyName,
+            country,
+            contactInfo
+        );
+
+        // Wait for the transactions to be confirmed
+        await Promise.all([
+            employerTx.wait(),
             fundTx.wait()
         ]);
     } catch (error) {

@@ -6,6 +6,7 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Student} from "./Student.sol";
 import {StudentDeployer} from "./StudentDeployer.sol";
 import {UniversityDeployer} from "./UniversityDeployer.sol";
+import {EmployerDeployer} from "./EmployerDeployer.sol";
 import {IEntryPoint} from "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
 
 // Custom errors for better clarity
@@ -13,6 +14,8 @@ error AlreadyExistingUniversity();
 error UniversityNotPresent();
 error AlreadyExistingStudent();
 error StudentNotPresent();
+error AlreadyExistingEmployer();
+error EmployerNotPresent();
 error RestrictedFunction();
 
 /**
@@ -24,27 +27,33 @@ error RestrictedFunction();
 contract StudentsRegister is Ownable {
     StudentDeployer private immutable studentDeployer;
     UniversityDeployer private immutable universityDeployer;
+    EmployerDeployer private immutable employerDeployer;
     IEntryPoint private immutable entryPoint;
 
     // State variables
     mapping(address university => address universityAccount)
         private universities;
     mapping(address student => address studentAccount) private students;
+    mapping(address employer => address employerAccount) private employers;
     mapping(address universityAccount => bool) private universitiesAccounts;
+    mapping(address employerAccount => bool) private employersAccounts;
 
     /**
      * @notice Initializes the StudentsRegister contract with required deployers and entry point
      * @param _studentDeployer Address of the StudentDeployer contract
      * @param _universityDeployer Address of the UniversityDeployer contract
+     * @param _employerDeployer Address of the EmployerDeployer contract
      * @param _entryPoint Address of the EntryPoint contract for account abstraction
      */
     constructor(
         address _studentDeployer,
         address _universityDeployer,
+        address _employerDeployer,
         address _entryPoint
     ) Ownable(_msgSender()) {
         studentDeployer = StudentDeployer(_studentDeployer);
         universityDeployer = UniversityDeployer(_universityDeployer);
+        employerDeployer = EmployerDeployer(_employerDeployer);
         entryPoint = IEntryPoint(_entryPoint);
     }
 
@@ -136,5 +145,51 @@ contract StudentsRegister is Ownable {
             return account;
         }
         revert StudentNotPresent();
+    }
+
+    /**
+     * @notice Registers a new employer in the system
+     * @param _address Address of the employer to register
+     * @param _companyName Employer's company name
+     * @param _country Employer's country location
+     * @param _contactInfo Optional contact information
+     * @custom:throws AlreadyExistingEmployer if employer is already registered
+     */
+    function subscribeEmployer(
+        address _address,
+        string calldata _companyName,
+        string calldata _country,
+        string calldata _contactInfo
+    ) external onlyOwner {
+        // Check if employer is not already registered
+        if (employers[_address] != address(0)) {
+            revert AlreadyExistingEmployer();
+        }
+
+        // Deploy employer account contract
+        address addr = employerDeployer.deploy(
+            _address,
+            _companyName,
+            _country,
+            _contactInfo,
+            entryPoint
+        );
+
+        // Map employer address to deployed account
+        employers[_address] = addr;
+        employersAccounts[addr] = true;
+    }
+
+    /**
+     * @notice Retrieves the employer account address for the calling employer
+     * @return The address of the employer's account contract
+     * @custom:throws EmployerNotPresent if employer is not registered
+     */
+    function getEmployerAccount() external view returns (address) {
+        address account = employers[_msgSender()];
+        if (account != address(0)) {
+            return account;
+        }
+        revert EmployerNotPresent();
     }
 }
