@@ -1,7 +1,7 @@
 import { S3Client, S3ClientConfig } from "@aws-sdk/client-s3";
 import { JsonRpcProvider, id } from "ethers";
 import { readFileSync, existsSync } from "fs";
-import { join } from "path";
+import { join, resolve } from "path";
 import * as dotenv from "dotenv";
 
 // Load environment variables from .env file if it exists
@@ -75,22 +75,44 @@ function loadBlockchainConfig(): BlockchainNetworkConfig {
     };
 
     // Try to load from deployments.json (created by CLI after deployment)
-    const deploymentsPath = join(process.cwd(), 'deployments.json');
-    if (existsSync(deploymentsPath)) {
-        try {
-            const deployments = JSON.parse(readFileSync(deploymentsPath, 'utf-8'));
-            return {
-                chainId: deployments.chainId || defaultConfig.chainId,
-                url: deployments.url || defaultConfig.url,
-                registerAddress: deployments.registerAddress || defaultConfig.registerAddress,
-                entryPointAddress: deployments.entryPointAddress || defaultConfig.entryPointAddress,
-                paymasterAddress: deployments.paymasterAddress || defaultConfig.paymasterAddress,
-                studentFactoryAddress: deployments.studentFactoryAddress || defaultConfig.studentFactoryAddress,
-            };
-        } catch (error) {
-            console.warn('Failed to load deployments.json, using default configuration:', error);
-            return defaultConfig;
+    // Check multiple possible locations:
+    // 1. Current working directory (when run from project root)
+    // 2. Parent directory (when run from cli directory)
+    const cwd = process.cwd();
+    const possiblePaths = [
+        join(cwd, 'deployments.json'),
+        resolve(cwd, '..', 'deployments.json'),
+    ];
+    
+    for (const deploymentsPath of possiblePaths) {
+        if (existsSync(deploymentsPath)) {
+            try {
+                const deployments = JSON.parse(readFileSync(deploymentsPath, 'utf-8'));
+                if (DEBUG) {
+                    console.log(`Loaded deployments.json from: ${deploymentsPath}`);
+                    console.log(`Register address: ${deployments.registerAddress}`);
+                }
+                return {
+                    chainId: deployments.chainId || defaultConfig.chainId,
+                    url: deployments.url || defaultConfig.url,
+                    registerAddress: deployments.registerAddress || defaultConfig.registerAddress,
+                    entryPointAddress: deployments.entryPointAddress || defaultConfig.entryPointAddress,
+                    paymasterAddress: deployments.paymasterAddress || defaultConfig.paymasterAddress,
+                    studentFactoryAddress: deployments.studentFactoryAddress || defaultConfig.studentFactoryAddress,
+                };
+            } catch (error) {
+                // Continue to next path if this one fails
+                if (DEBUG) {
+                    console.warn(`Failed to load deployments.json from ${deploymentsPath}:`, error);
+                }
+                continue;
+            }
         }
+    }
+    
+    if (DEBUG) {
+        console.warn('deployments.json not found in any of the checked locations, using default configuration');
+        console.warn('Checked paths:', possiblePaths);
     }
 
     return defaultConfig;

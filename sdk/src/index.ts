@@ -47,6 +47,13 @@ export async function registerStudent(universityWallet: Wallet, student: Student
         // Get contract instance
         const studentsRegister = getStudentsRegister();
 
+        // Verify university is registered before attempting student registration
+        try {
+            await getUniversityAccountAddress(universityWallet);
+        } catch (error) {
+            throw new Error('University is not registered. Please register the university first using the CLI.');
+        }
+
         // Create a new Ethereum wallet for the student
         const studentEthWallet = createStudentWallet();
 
@@ -203,6 +210,10 @@ export async function evaluateStudent(universityWallet: Wallet, studentWalletAdd
         await sendTransaction(connectedUniversity, studentWallet, studentWalletAddress, 'evaluate', [contractEvaluations], AccountType.University);
     } catch (error) {
         logError('Evaluation process failed:', error);
+        // Preserve the original error message if it's informative
+        if (error instanceof Error && error.message) {
+            throw new Error(`Student evaluation failed: ${error.message}`);
+        }
         throw new Error('Student evaluation failed');
     }
 }

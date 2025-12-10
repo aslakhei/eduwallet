@@ -226,7 +226,7 @@ contract Student is SmartAccount, AccessControlEnumerable {
                 // Different universities may use the same course code, so check both code and university address
                 if (
                     keccak256(bytes(studentInfo.results[j].code)) ==
-                    keccak256(bytes(_evaluations[j].code)) &&
+                    keccak256(bytes(_evaluations[i].code)) &&
                     studentInfo.results[j].university == _msgSender()
                 ) {
                     // Update the result record with evaluation data

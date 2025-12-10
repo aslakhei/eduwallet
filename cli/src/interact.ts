@@ -659,8 +659,13 @@ export async function evaluateStudent(studentWallet: string, evaluations: eduwal
 
         // Use the SDK to record evaluations for the student
         await eduwallet.evaluateStudent(uni, studentWallet, evaluations);
+        
+        if (VERBOSE) {
+            console.log("Student evaluation completed successfully");
+        }
     } catch (error) {
-        throw new Error(`${error}`);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        throw new Error(`Failed to evaluate student: ${errorMessage}`);
     }
 }
 
